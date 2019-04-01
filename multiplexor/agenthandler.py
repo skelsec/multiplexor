@@ -18,7 +18,7 @@ class AgentStatus(enum.Enum):
 	TERMINATED = 4
 	
 class MultiplexorAgentHandler:
-	def __init__(self, agent_id):
+	def __init__(self):
 		self.agent_id = None
 		self.cmd_send_queue = None
 		self.cmd_recv_queue = None

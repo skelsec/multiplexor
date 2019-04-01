@@ -3,26 +3,29 @@ import websockets
 import uuid
 from multiplexor.packetizer import Packetizer
 from multiplexor.agenthandler import MultiplexorAgentHandler
+from multiplexor.logger.logger import *
 
 class WebsocketsTransportServer:
 	def __init__(self, listen_ip, listen_port, logging_queue, ssl_ctx = None):
 		self.listen_ip = listen_ip
 		self.listen_port = listen_port
 		self.ssl_ctx = ssl_ctx
-		self.logging_queue = logging_queue
+		self.logger = Logger('WebsocketsTransportServer', logQ = logging_queue)
 		self.agent_dispatch_queue = None #will be defined by the server!
 			
-		
+	@mpexception	
 	async def handle_packetizer_send(self, agent):
 		while not agent.trasnport_terminated_evt.is_set():
 			data = await agent.packetizer.packetizer_out.get()
 			await agent.transport.send(data)
-		
+	
+	@mpexception	
 	async def handle_packetizer_recv(self, agent):
 		while not agent.trasnport_terminated_evt.is_set():
 			data = await agent.transport.recv()
 			await agent.packetizer.packetizer_in.put(data)
 	
+	@mpexception
 	async def handle_agent(self, websocket, path):
 		print('Agent connected!')
 		agent = MultiplexorAgentHandler()
@@ -38,7 +41,7 @@ class WebsocketsTransportServer:
 		agent.trasnport_terminated_evt.set()
 		print('Agent disconnected!')
 		
-	
+	@mpexception
 	async def run(self):
 		try:
 			server = await websockets.serve(self.handle_agent, self.listen_ip, self.listen_port, ssl=self.ssl_ctx)

@@ -3,6 +3,7 @@ import asyncio
 from multiplexor.transports.websockets import WebsocketsTransportServer
 from multiplexor.operatorhandler import OperatorHandler
 from multiplexor.server import MultiplexorServer
+from multiplexor.logger.logger import Logger
 
 if __name__ == '__main__':
 	listen_ip = '127.0.0.1'
@@ -10,11 +11,13 @@ if __name__ == '__main__':
 	operator_listen_ip = '127.0.0.1'
 	operator_listen_port = 9999	
 	
-	logging_queue = asyncio.Queue()
-	op = OperatorHandler(operator_listen_ip, operator_listen_port)
-	transport = WebsocketsTransportServer(listen_ip, listen_port, logging_queue)
+	logger = Logger('Logger')
+	asyncio.ensure_future(logger.run())
+
+	op = OperatorHandler(operator_listen_ip, operator_listen_port, logger.logQ)
+	transport = WebsocketsTransportServer(listen_ip, listen_port, logger.logQ)
 	
-	s = MultiplexorServer()
+	s = MultiplexorServer(logger.logQ)
 	s.add_transport(transport)
 	s.add_ophandler(op)
 	

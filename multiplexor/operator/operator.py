@@ -16,12 +16,12 @@ class Operator:
 			data = await self.ws.recv()
 			print('RPLY in!')
 			rply = OperatorCmdParser.from_json(data)
-			print(rply)
+			print(rply.to_dict())
 		
 	async def handle_server_out(self):
 		while True:
 			cmd = await self.server_cmd_q.get()
-			self.ws.send(json.dumps(cmd.to_dict()))
+			await self.ws.send(json.dumps(cmd.to_dict()))
 			print('CMD sent!')
 		
 	async def connect(self):
@@ -40,8 +40,8 @@ class Operator:
 	async def send_test_data(self):
 		self.server_url = 'ws://127.0.0.1:9999'
 		asyncio.ensure_future(self.connect())
-		await asyncio.sleep(3)
+		#await asyncio.sleep(3)
 		print('Sending command')
 		cmd = OperatorListAgentsCmd()
 		await self.server_cmd_q.put(cmd)
-		await asyncio.sleep(1)
+		await asyncio.sleep(10)

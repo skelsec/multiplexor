@@ -25,7 +25,7 @@ class OperatorCmdParser:
 		if 'cmdtype' not in d:
 			raise Exception('Unknown data!')
 		
-		t = d['cmdtype']
+		t = OperatorCmdType(d['cmdtype'])
 		if t not in type2obj:
 			raise Exception('Object not found!')
 		
@@ -56,7 +56,7 @@ class OperatorListAgentsRply:
 	@staticmethod
 	def from_dict(d):
 		t = OperatorListAgentsRply()
-		for a in t['agents']:
+		for a in d['agents']:
 			t.agents.append(a)
 		return t
 		

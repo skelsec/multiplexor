@@ -1,7 +1,9 @@
 import asyncio
+from multiplexor.logger.logger import *
 
 class Packetizer:
-	def __init__(self, agent_id, cancellation_evt):
+	def __init__(self, agent_id, logQ,cancellation_evt):
+		self.logger = Logger('Packetizer', logQ = logQ)
 		self.agent_id = agent_id
 		self.trasnport_terminated_evt = cancellation_evt
 		self.packetizer_in = asyncio.Queue()
@@ -15,13 +17,14 @@ class Packetizer:
 		
 		self.max_packet_size = 5*1024
 		
+	@mpexception
 	async def recv_loop(self):
 		while not self.trasnport_terminated_evt.is_set():
 			data = await self.packetizer_in.get()
 			self.recv_buffer += data
 			await self.process_recv_buffer()
 			
-				
+	@mpexception			
 	async def process_recv_buffer(self):
 		if len(self.recv_buffer) != 4:
 			return
@@ -34,7 +37,8 @@ class Packetizer:
 			self.recv_buffer = self.recv_buffer[self.next_cmd_length + 4:]
 			await self.multiplexor_in.put((agent_id, cmd))
 			await self.process_recv_buffer(self)
-		
+	
+	@mpexception	
 	async def send_loop(self):
 		while not self.trasnport_terminated_evt.is_set():
 			try:
@@ -51,7 +55,7 @@ class Packetizer:
 					await self.packetizer_out.put(self.send_buffer[:self.max_packet_size])
 					self.send_buffer = self.send_buffer[self.max_packet_size:]
 					
-		
+	@mpexception	
 	async def run(self):
 		asyncio.ensure_future(self.recv_loop())
 		asyncio.ensure_future(self.send_loop())
