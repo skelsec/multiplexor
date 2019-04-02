@@ -28,6 +28,7 @@ class MultiplexorAgentHandler:
 		self.trasnport_terminated_evt = asyncio.Event()
 		self.packetizer = None
 		
+		self.plugin_ctr = 0
 		self.plugins = {}
 		
 		self.status = AgentStatus.CONNECTED

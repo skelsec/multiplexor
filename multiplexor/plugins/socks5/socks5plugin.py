@@ -1,6 +1,8 @@
 import asyncio
 
 from multiplexor.plugins.plugins import *
+from multiplexor.plugins.socks5.socks5protocol import *
+from multiplexor.plugins.socks5.socks5pluginprotocol import *
 
 class MultiplexorSocks5SocketProxy:
 	def __init__(self):
@@ -68,8 +70,8 @@ class MultiplexorSocks5SocketProxy:
 		
 
 class MultiplexorSocks5(MultiplexorPluginBase):
-	def __init__(self, logQ):
-		MultiplexorPluginBase.__init__(self,'MultiplexorSocks5', logQ)
+	def __init__(self, plugin_id, logQ):
+		MultiplexorPluginBase.__init__(self, plugin_id, 'MultiplexorSocks5', logQ)
 		
 		self.mutual_auth_type = None
 		self.supported_auth_types = [SOCKS5Method.NOAUTH]
@@ -141,21 +143,21 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 
 				t = await asyncio.wait_for(self.socket_send(writer, SOCKS5NegoReply.construct(self.mutual_auth_type).to_bytes()), timeout = 1)
 		
-			"""
-			elif self.session.current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
-				if self.session.mutual_auth_type == SOCKS5Method.PLAIN:
-					status, creds = self.session.authHandler.do_AUTH(msg)
-					await self.logger.credential(creds.to_credential())
-					if status:
-						self.session.current_state = SOCKS5ServerState.REQUEST
-						t = await asyncio.wait_for(self.socket_send(SOCKS5NegoReply.construct_auth(SOCKS5Method.NOAUTH).to_bytes()), timeout = 1)
+				"""
+				elif self.session.current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
+					if self.session.mutual_auth_type == SOCKS5Method.PLAIN:
+						status, creds = self.session.authHandler.do_AUTH(msg)
+						await self.logger.credential(creds.to_credential())
+						if status:
+							self.session.current_state = SOCKS5ServerState.REQUEST
+							t = await asyncio.wait_for(self.socket_send(SOCKS5NegoReply.construct_auth(SOCKS5Method.NOAUTH).to_bytes()), timeout = 1)
+						else:
+							t = await asyncio.wait_for(self.socket_send(SOCKS5NegoReply.construct_auth(SOCKS5Method.NOTACCEPTABLE).to_bytes()), timeout = 1)
+							break
 					else:
-						t = await asyncio.wait_for(self.socket_send(SOCKS5NegoReply.construct_auth(SOCKS5Method.NOTACCEPTABLE).to_bytes()), timeout = 1)
-						break
-				else:
-					#put GSSAPI implementation here
-					raise Exception('Not implemented!')
-			"""
+						#put GSSAPI implementation here
+						raise Exception('Not implemented!')
+				"""
 			
 			elif self.current_state == SOCKS5ServerState.REQUEST:
 				await self.logger.debug('Remote client wants to connect to %s:%d' % (str(msg.DST_ADDR), msg.DST_PORT))
@@ -207,11 +209,11 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 						del self.dispatch_table[socket_id]
 						return
 
-				else:
-					t = await asyncio.wait_for(SOCKS5Reply.construct(SOCKS5ReplyType.COMMAND_NOT_SUPPORTED, self.session.allinterface, 0).to_bytes(), timeout = 1)		
+			else:
+				t = await asyncio.wait_for(SOCKS5Reply.construct(SOCKS5ReplyType.COMMAND_NOT_SUPPORTED, self.session.allinterface, 0).to_bytes(), timeout = 1)	
 			
 	
-	await run(self):
+	async def run(self):
 		while not self.stop_plugin_evt.is_set():
 			server = await asyncio.start_server(handle_socks_client, '127.0.0.1', 0)
 			await server.serve_forever()

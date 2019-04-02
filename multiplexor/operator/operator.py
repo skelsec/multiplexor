@@ -31,6 +31,13 @@ class Operator:
 				if rply.agent_id not in self.agents:
 					self.agents[rply.agent_id] = 1
 				self.agents[rply.agent_id] = rply.agentinfo
+				
+				cmd = OperatorStartPlugin()
+				cmd.cmdtype = OperatorCmdType.START_PLUGIN
+				cmd.agent_id = rply.agent_id
+				cmd.plugin_type = 0
+				cmd.plugin_data = None
+				await self.server_cmd_q.put(cmd)
 			
 		
 	async def handle_server_out(self):
@@ -60,3 +67,4 @@ class Operator:
 		cmd = OperatorListAgentsCmd()
 		await self.server_cmd_q.put(cmd)
 		await asyncio.sleep(10)
+		

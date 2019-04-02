@@ -5,6 +5,8 @@ from multiplexor.operator.protocol import *
 from multiplexor.logger.logger import *
 from multiplexor.agenthandler import *
 from multiplexor.protocol.server import *
+from multiplexor.plugins.plugins import *
+from multiplexor.plugins.socks5.socks5plugin import *
 
 class MultiplexorServer:
 	def __init__(self, logQ):
@@ -89,12 +91,7 @@ class MultiplexorServer:
 				except Exception as e:
 					await self.logger.debug('Operator tried to slect and unknown agent %s' % op_cmd.agent_id)
 				else:
-					rply = OperatorGetPluginInfoRply()
-					rply.agent_id = op_cmd.agent_id
-					rply.plugin_id = op_cmd.plugin_id
-					for k in agent.plugins:
-						rply.plugins.append(k)
-					await operator.multiplexor_cmd_out.put(rply)
+					await self.start_plugin(agent, op_cmd.plugin_type, op_cmd.plugin_data)
 				
 				
 			else:
@@ -168,7 +165,23 @@ class MultiplexorServer:
 	@mpexception
 	async def start_plugin(self, agent, plugin_type, plugin_params):
 		while not self.shutdown_evt.is_set() or not agent.transport.trasnport_terminated_evt.is_set():
+			plugin_id = agent.plugin_ctr
+			agent.plugin_ctr += 1
+			
+			if plugin_type == PluginType.SOCKS5.value:
+				mp = MultiplexorSocks5(plugin_id, self.logger.logQ)
+				
+			elif plugin_type == PluginType.PYPYKATZ.value:
+				raise Exception('Not implemented')
+			
+			elif plugin_type == PluginType.SSPI.value:
+				raise Exception('Not implemented')
+			
+			plugin = mp.get_plugin()
+			asyncio.ensure_future(mp.start())
+			
 			cmd = MultiplexorPluginStart()
+			cmd.plugin_id = str(plugin_id)
 			cmd.plugin_type = plugin_type
 			cmd.plugin_params = plugin_params
 			await agent.packetizer.multiplexor_out.put(cmd)
