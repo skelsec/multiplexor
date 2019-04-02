@@ -30,7 +30,7 @@ class WebsocketsTransportServer:
 		print('Agent connected!')
 		agent = MultiplexorAgentHandler()
 		agent.transport = websocket
-		agent.packetizer = Packetizer(uuid.uuid4(), agent.trasnport_terminated_evt)
+		agent.packetizer = Packetizer(self.logger.logQ, agent.trasnport_terminated_evt)
 		
 		asyncio.ensure_future(agent.packetizer.run())
 		asyncio.ensure_future(self.handle_packetizer_send(agent))

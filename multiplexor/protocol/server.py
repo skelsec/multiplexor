@@ -6,7 +6,7 @@ import enum
 ### 4        |1  |1      |4       |len(var_n)|4       |len(varn+1)....
 ###
 
-class ServerCMDType:
+class ServerCMDType(enum.Enum):
 	REGISTER = 0
 	GET_INFO = 1
 	SWITCH_ENCRYPTION = 2
@@ -18,7 +18,27 @@ class ServerCMDType:
 	PLUGIN_STARTED_EVT = 8
 	AGENT_LOG = 9
 	
-
+class MultiplexorGetInfo:
+	def __init__(self):
+		self.cmdtype = ServerCMDType.GET_INFO
+		self.agent_id = None
+		self.agent_info = None
+		
+	@staticmethod
+	def from_cmd(cmd):
+		print(str(cmd))
+		p = MultiplexorGetInfo()
+		p.agent_id = cmd.params[0].decode()
+		p.agent_info = cmd.params[1].decode()
+		return p
+		
+	def to_bytes(self):
+		cmd = MultiplexorCMD()
+		cmd.cmdtype = self.cmdtype
+		if self.agent_info:
+			cmd.params.append(self.agent_id.encode())
+			cmd.params.append(self.agent_info.encode())			
+		return cmd.to_bytes()
 	
 class MultiplexorRegister:
 	def __init__(self):
@@ -29,16 +49,18 @@ class MultiplexorRegister:
 		
 	@staticmethod
 	def from_cmd(cmd):
+		print(str(cmd))
 		p = MultiplexorRegister()
-		p.secret = cmd.params(0)
-		if len(cmd.params) > 1:
-			p.agent_id = cmd.params(1).decode()
+		if len(cmd.params) != 0:
+			p.secret = cmd.params[0]
+			if len(cmd.params) > 1:
+				p.agent_id = cmd.params[1].decode()
 		return p
 		
 	def to_bytes(self):
 		cmd = MultiplexorCMD()
 		cmd.cmdtype = self.cmdtype
-		cmd.params.append(secret)
+		cmd.params.append(self.secret)
 		if self.agent_id:
 			cmd.params.append(self.agent_id.encode())
 		return cmd.to_bytes()
@@ -52,9 +74,9 @@ class MultiplexorPluginStart:
 	@staticmethod
 	def from_cmd(cmd):
 		p = MultiplexorPluginStart()
-		p.plugin_type = int.from_bytes(cmd.params(0), 'big', signed = False)
+		p.plugin_type = int.from_bytes(cmd.params[0], 'big', signed = False)
 		if len(cmd.params) > 1:
-			p.plugin_id = int.from_bytes(cmd.params(1), 'big', signed = False)
+			p.plugin_id = int.from_bytes(cmd.params[1], 'big', signed = False)
 		return p
 		
 	def to_bytes(self):
@@ -73,7 +95,7 @@ class MultiplexorPluginStop:
 	@staticmethod
 	def from_cmd(cmd):
 		p = MultiplexorPluginStop()
-		p.plugin_id = int.from_bytes(cmd.params(0), 'big', signed = False)
+		p.plugin_id = int.from_bytes(cmd.params[0], 'big', signed = False)
 		return p
 		
 	def to_bytes(self):
@@ -91,8 +113,8 @@ class MultiplexorPluginData:
 	@staticmethod
 	def from_cmd(cmd):
 		p = MultiplexorPluginData()
-		p.plugin_id = int.from_bytes(cmd.params(0), 'big', signed = False)
-		p.plugin_data = cmd.params(1)
+		p.plugin_id = int.from_bytes(cmd.params[0], 'big', signed = False)
+		p.plugin_data = cmd.params[1]
 		return p
 		
 	def to_bytes(self):
@@ -111,8 +133,8 @@ class MultiplexorPluginStoppedEvt:
 	@staticmethod
 	def from_cmd(cmd):
 		p = MultiplexorPluginStoppedEvt()
-		p.plugin_id = int.from_bytes(cmd.params(0), 'big', signed = False)
-		p.reason = cmd.params(1).decode()
+		p.plugin_id = int.from_bytes(cmd.params[0], 'big', signed = False)
+		p.reason = cmd.params[1].decode()
 		return p
 		
 	def to_bytes(self):
@@ -133,9 +155,9 @@ class MultiplexorAgentLog:
 	@staticmethod
 	def from_cmd(cmd):
 		p = MultiplexorAgentLog()
-		p.severity = int.from_bytes(cmd.params(0), 'big', signed = False)
-		p.msg = cmd.params(1).decode()
-		p.plugin_id = int.from_bytes(cmd.params(2), 'big', signed = False)
+		p.severity = int.from_bytes(cmd.params[0], 'big', signed = False)
+		p.msg = cmd.params[1].decode()
+		p.plugin_id = int.from_bytes(cmd.params[2], 'big', signed = False)
 		return p
 		
 	def to_bytes(self):
@@ -195,7 +217,7 @@ class MultiplexorCMD:
 		
 type2obj = {
 	ServerCMDType.REGISTER : MultiplexorRegister,
-	ServerCMDType.GET_INFO : None, #TODO: implement
+	ServerCMDType.GET_INFO : MultiplexorGetInfo,
 	ServerCMDType.SWITCH_ENCRYPTION : None, #TODO: implement
 	ServerCMDType.START_ENCRYPTION : None, #TODO: implement
 	ServerCMDType.PLUGIN_START : MultiplexorPluginStart,
