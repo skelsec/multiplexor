@@ -641,3 +641,43 @@ class SOCKS5UDP:
 		t += self.DST_PORT.to_bytes(2, byteorder = 'big', signed = False)
 		t += self.DATA
 		return t
+		
+		
+def get_mutual_preference(preference, offered):
+	# this is a commonly used algo when we need to determine the mutual option
+	# which is both supported by the client and the server, in order of the
+	# server's preference
+	"""
+	Generic function to determine which option to use from two lists of options offered by two parties.
+	Returns the option that is mutual and in the highes priority of the preference
+	:param preference: A list of options where the preference is set by the option's position in the list (lower is most preferred)
+	:type preference: list
+	:param offered: A list of options that the other party can offer
+	:type offered: list
+	:return: tuple
+	"""
+	clinet_supp = set(offered)
+	server_supp = set(preference)
+	common_supp = server_supp.intersection(clinet_supp)
+	if common_supp is None:
+		return None, None
+	
+	preferred_opt = None
+	for srv_option in preference:
+		for common_option in common_supp:
+			if common_option == srv_option:
+				preferred_opt = srv_option
+				break
+		else:
+			continue
+		break
+	
+	# getting index of the preferred option...
+	preferred_opt_idx = 0
+	for option in offered:
+		if option == preferred_opt:
+			# preferred_dialect_idx += 1
+			break
+		preferred_opt_idx += 1
+
+	return preferred_opt, preferred_opt_idx

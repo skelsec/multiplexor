@@ -12,19 +12,22 @@ class Socks5ServerCmdType(enum.Enum):
 class Socks5PluginConnectCmd:
 	def __init__(self):
 		self.cmdtype = ServerCMDType.PLUGIN_CONNECT
+		self.socket_id = None
 		self.dst_addr = None
 		self.dst_port = None
 	
 	@staticmethod
 	def from_cmd(cmd):
 		p = Socks5PluginConnectCmd()
-		p.dst_addr = cmd.params[0].decode()
-		p.dst_port = cmd.params[1].decode()
+		p.socket_id = cmd.socket_id[0].decode()
+		p.dst_addr = cmd.params[1].decode()
+		p.dst_port = cmd.params[2].decode()
 		return p
 		
 	def to_bytes(self):
 		cmd = Socks5PluginConnectCmd()
 		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.socket_id.encode())
 		cmd.params.append(self.dst_addr.encode())
 		cmd.params.append(self.dst_port.encode())
 		return cmd.to_bytes()
@@ -32,19 +35,22 @@ class Socks5PluginConnectCmd:
 class Socks5PluginListenCmd:
 	def __init__(self):
 		self.cmdtype = ServerCMDType.PLUGIN_LISTEN
+		self.socket_id = None
 		self.listen_addr = None
 		self.listen_port = None
 	
 	@staticmethod
 	def from_cmd(cmd):
 		p = Socks5PluginListenCmd()
-		p.listen_addr = cmd.params[0].decode()
-		p.listen_port = cmd.params[1].decode()
+		p.socket_id = cmd.params[0].decode()
+		p.listen_addr = cmd.params[1].decode()
+		p.listen_port = cmd.params[2].decode()
 		return p
 		
 	def to_bytes(self):
 		cmd = Socks5PluginListenCmd()
 		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.socket_id.encode())
 		cmd.params.append(self.listen_addr.encode())
 		cmd.params.append(self.listen_port.encode())
 		return cmd.to_bytes()
@@ -52,12 +58,14 @@ class Socks5PluginListenCmd:
 class Socks5PluginUDPCmd:
 	def __init__(self):
 		self.cmdtype = ServerCMDType.PLUGIN_UDP
+		self.socket_id = None
 		self.listen_addr = None
 		self.listen_port = None
 	
 	@staticmethod
 	def from_cmd(cmd):
 		p = Socks5PluginUDPCmd()
+		p.socket_id = cmd.params[0].decode()
 		p.listen_addr = cmd.params[0].decode()
 		p.listen_port = cmd.params[1].decode()
 		return p
@@ -65,6 +73,7 @@ class Socks5PluginUDPCmd:
 	def to_bytes(self):
 		cmd = Socks5PluginUDPCmd()
 		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.socket_id.encode())
 		cmd.params.append(self.listen_addr.encode())
 		cmd.params.append(self.listen_port.encode())
 		return cmd.to_bytes()
@@ -72,31 +81,37 @@ class Socks5PluginUDPCmd:
 class Socks5PluginSocketDataCmd:
 	def __init__(self):
 		self.cmdtype = ServerCMDType.SOCKET_DATA
+		self.socket_id = None
 		self.data = None
 	
 	@staticmethod
 	def from_cmd(cmd):
 		p = Socks5PluginSocketDataCmd()
-		p.data = cmd.params[0]
+		p.socket_id = cmd.params[0].decode()
+		p.data = cmd.params[1]
 		return p
 		
 	def to_bytes(self):
 		cmd = Socks5PluginSocketDataCmd()
 		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.socket_id.encode())
 		cmd.params.append(self.data)
 		return cmd.to_bytes()
 		
 class Socks5PluginSocketTerminatedEvent:
 	def __init__(self):
 		self.cmdtype = ServerCMDType.SOCKET_TERMINATED_EVT
+		self.socket_id = None
 	
 	@staticmethod
 	def from_cmd(cmd):
 		p = Socks5PluginSocketTerminatedEvent()
+		p.socket_id = cmd.params[0].decode()
 		return p
 		
 	def to_bytes(self):
 		cmd = Socks5PluginSocketTerminatedEvent()
+		cmd.params.append(self.socket_id.encode())
 		return cmd.to_bytes()
 	
 class Socks5PluginCMD:

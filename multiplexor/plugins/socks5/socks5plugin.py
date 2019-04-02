@@ -3,43 +3,57 @@ import asyncio
 from multiplexor.plugins.plugins import *
 
 class MultiplexorSocks5SocketProxy:
-	def __init__(self, logQ):
+	def __init__(self):
 		"""
 		Handels the socket after the socks5 setup is completed
 		"""
-		self.logger = Logger(plugin_name, logQ)
+		self.logger = None
 		self.socket_id = None
 		self.socket_terminated_evt = None
+		self.plugin_broken_evt = None
 		
 		self.reader = None
 		self.writer = None
 		self.socket_queue_in = None
 		self.socket_queue_out = None
 		
-	async def proxy_send(self, reader, ):
-		while not self.socket_broken_evt.is_set() or not self.plugin_broken_evt.is_set() or not self.stop_plugin_evt.is_set() or not socket_terminated_evt.is_set():
+	async def proxy_send(self):
+		while not self.socket_terminated_evt.is_set() or not self.plugin_broken_evt.is_set():
 			#todo: check timeout
 			try:
-				data = await reader.read(4096)
+				data = await self.reader.read(4096)
 			except Exception as e:
 				await self.logger.info('reader exception! %s' % e)
 				#notifying reader/writer that socket is terminated
-				socket_terminated_evt.set()
+				self.socket_terminated_evt.set()
 				#notifying remote end that socket is terminated
 				cmd = Socks5PluginSocketTerminatedEvent()
-				await self.socket_queue_out(cmd.to_bytes())
+				cmd.socket_id = self.socket_id
+				await self.plugin_out(cmd.to_bytes())
+				return
 				
 			else:
+				if not data:
+					#socket terminated...
+					await self.logger.info('reader exception! %s' % e)
+					#notifying reader/writer that socket is terminated
+					self.socket_terminated_evt.set()
+					#notifying remote end that socket is terminated
+					cmd = Socks5PluginSocketTerminatedEvent()
+					cmd.socket_id = self.socket_id
+					await self.plugin_out(cmd.to_bytes())
+					return
+					
 				#sending recieved data to the remote agent
 				cmd = Socks5PluginSocketDataCmd()
-				cmd.data = data
+				cmd.socket_id = self.socket_id
+				cmd.data = self.data
 				await self.plugin_out(cmd.to_bytes())
 	
 	
-	async def proxy_recv(self, writer, socket_terminated_evt):
-		while not self.socket_broken_evt.is_set() or not self.plugin_broken_evt.is_set() or not self.stop_plugin_evt.is_set() or not socket_terminated_evt.is_set():
-			data = await self.plugin_in.get()
-			cmd = Socks5PluginCMD.from_bytes(data)
+	async def proxy_recv(self):
+		while not self.socket_terminated_evt.is_set() or not self.plugin_broken_evt.is_set():
+			cmd = await self.socket_queue_in.get()
 			if cmd.cmdtype == SOCKET_DATA:
 				writer.write(cmd.data)
 			
@@ -64,11 +78,42 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 		
 		self.plugin_broken_evt = asyncio.Event()
 		
-
-	async def handle_socket_data_in(self):
-		pass
+		self.dispatch_table = {} #socket_id to destination queue
+		
+		self.current_socket_id = 0
+		
 			
-	
+	async def handle_plugin_data_in(self):
+		while not self.plugin_broken_evt.is_set() or not self.stop_plugin_evt.is_set():
+			data = await self.plugin_in.get()
+			
+			cmd = Socks5PluginCMD.from_bytes(data)
+			if cmd.cmdtype == Socks5ServerCmdType.PLUGIN_CONNECT:
+				await self.dispatch_table[cmd.socket_id].put(cmd)
+				
+			elif cmd.cmdtype == Socks5ServerCmdType.PLUGIN_LISTEN:
+				await self.dispatch_table[cmd.socket_id].put(cmd)
+
+			elif cmd.cmdtype == Socks5ServerCmdType.PLUGIN_UDP:
+				await self.dispatch_table[cmd.socket_id].put(cmd)
+
+			elif cmd.cmdtype == Socks5ServerCmdType.PLUGIN_ERROR:
+				self.plugin_broken_evt.set()
+
+			elif cmd.cmdtype == Socks5ServerCmdType.SOCKET_TERMINATED_EVT:
+				await self.dispatch_table[cmd.socket_id].put(cmd)
+
+			elif cmd.cmdtype == Socks5ServerCmdType.SOCKET_DATA:
+				await self.dispatch_table[cmd.socket_id].put(cmd)
+			else:
+				await self.logger.info('Unknown data in')
+		
+	async def socket_send(self, writer, data):
+		"""
+		this is just a dumb helper function
+		"""
+		writer.write(data)
+		await writer.drain()
 				
 	async def handle_socks_client(reader, writer):
 		while not self.stop_plugin_evt.is_set():
@@ -78,8 +123,9 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 				mutual, mutual_idx = get_mutual_preference(self.supported_auth_types, msg.METHODS)
 				if mutual is None:
 					await self.logger.debug('No common authentication types! Client supports %s' % (','.join([str(x) for x in msg.METHODS])))
-					t = await asyncio.wait_for(self.socket_send(SOCKS5NegoReply.construct_auth(SOCKS5Method.NOTACCEPTABLE).to_bytes()), timeout = 1)
-					break
+					t = await asyncio.wait_for(self.socket_send(writer, SOCKS5NegoReply.construct_auth(SOCKS5Method.NOTACCEPTABLE).to_bytes()), timeout = 1)
+					writer.close()
+					return
 				await self.logger.debug('Mutual authentication type: %s' % mutual)
 				self.mutual_auth_type = mutual
 				self.current_state = SOCKS5ServerState.REQUEST # if no authentication is requred then we skip the auth part
@@ -93,7 +139,7 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 					self.session.current_state = SOCKS5ServerState.NOT_AUTHENTICATED
 				"""
 
-				t = await asyncio.wait_for(self.socket_send(SOCKS5NegoReply.construct(self.mutual_auth_type).to_bytes()), timeout = 1)
+				t = await asyncio.wait_for(self.socket_send(writer, SOCKS5NegoReply.construct(self.mutual_auth_type).to_bytes()), timeout = 1)
 		
 			"""
 			elif self.session.current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
@@ -113,34 +159,56 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 			
 			elif self.current_state == SOCKS5ServerState.REQUEST:
 				await self.logger.debug('Remote client wants to connect to %s:%d' % (str(msg.DST_ADDR), msg.DST_PORT))
-				if msg.CMD == SOCKS5Command.CONNECT:
-					#in this case the server acts as a normal socks5 server
+				if msg.CMD == SOCKS5Command.CONNECT:					
+					#setting up socket_id and a dispatch table entry for our new socket
+					#then sending the connection request info to the agent
+					#then waiting for the agent's reply
+					iq = asyncio.Queue()
+					socket_id = str(self.current_socket_id)
+					self.current_socket_id += 1
+					self.dispatch_table[socket_id] = iq
 					
-					#now we need to notify the agent's plugin on the remote end that a new connection is inbound
-					#TODO
 					
-					#######proxy_reader, proxy_writer = await asyncio.wait_for(asyncio.open_connection(host=str(msg.DST_ADDR),port = msg.DST_PORT), timeout=1)
-					await self.logger.debug('Connected!')
+					cmd = Socks5PluginConnectCmd()
+					cmd.socket_id = socket_id
+					cmd.dst_addr = str(msg.DST_ADDR)
+					cmd.dst_port = str(msg.DST_PORT)
 					
+					await self.plugin_out.put(cmd.to_bytes())
 					
-					self.session.current_state = SOCKS5ServerState.RELAYING
-					#we need to notify the socket client that the connection sucseeded
-					t = await asyncio.wait_for(self.send_data(SOCKS5Reply.construct(SOCKS5ReplyType.SUCCEEDED, self.session.allinterface, 0).to_bytes()), timeout = 1)
-					#######self.loop.create_task(self.proxy_forwarder(proxy_reader, self.cwriter, (str(msg.DST_ADDR),int(msg.DST_PORT)), self.caddr))
-					#######self.loop.create_task(self.proxy_forwarder(self.creader, proxy_writer, self.caddr, (str(msg.DST_ADDR),int(msg.DST_PORT))))
-
-					await asyncio.wait_for(self.session.proxy_closed.wait(), timeout = None)
-					break
+					agent_reply = await self.dispatch_table[self.current_socket_id].get()
+					
+					if agent_reply.cmdtype == ServerCMDType.PLUGIN_CONNECT:
+						#agent sucsessfully connected to the remote end! cool!
+						#now we need to set up a socket proxy class, and give it the iq queue (that is still in the dispatch table)
+						await self.logger.debug('Connected!')
+						proxy = MultiplexorSocks5SocketProxy()
+						proxy.logger = Logger(plugin_name, logQ)
+						proxy.socket_id = socket_id
+						proxy.socket_terminated_evt = asyncio.Event()
 						
+						proxy.reader = reader
+						proxy.writer = writer
+						proxy.socket_queue_in = iq
+						proxy.socket_queue_out = self.plugin_out
+						proxy.plugin_broken_evt = self.plugin_broken_evt
+						proxy.run()
+						
+						#also we need to set up an outbound function
+						asyncio.ensure_future(self.handle_socket_data_out(proxy))
+						
+						#now we wait for the connection to finish
+						await proxy.socket_terminated_evt.wait()
+						return
+					
+					else:
+						#agent failed to set up the connection :(
+						writer.close()
+						del self.dispatch_table[socket_id]
+						return
 
 				else:
-					t = await asyncio.wait_for(SOCKS5Reply.construct(SOCKS5ReplyType.COMMAND_NOT_SUPPORTED, self.session.allinterface, 0).to_bytes(), timeout = 1)
-		
-			
-		self.stop_plugin_evt.set()
-			
-			
-			
+					t = await asyncio.wait_for(SOCKS5Reply.construct(SOCKS5ReplyType.COMMAND_NOT_SUPPORTED, self.session.allinterface, 0).to_bytes(), timeout = 1)		
 			
 	
 	await run(self):
