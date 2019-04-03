@@ -12,12 +12,10 @@ class Logger:
 	Probably will replace logtask "solution" with this one in the future
 	TODO
 	"""
-	def __init__(self, name, logger = None, logQ = None, level = logging.DEBUG, connection = None):
+	def __init__(self, name, logQ = None, level = logging.DEBUG):
 		self.level = level
 		self.consumers = {}
-		self.logger = logger
 		self.name = name
-		self._connection = connection
 
 		self.is_final = True
 		if logQ:
@@ -54,10 +52,10 @@ class Logger:
 			print(e)
 			
 	async def debug(self, msg):
-		await self.logQ.put(LogEntry(logging.DEBUG, self.name, msg, self._connection))
+		await self.logQ.put(LogEntry(logging.DEBUG, self.name, msg))
 		
 	async def info(self, msg):
-		await self.logQ.put(LogEntry(logging.INFO, self.name, msg, self._connection))
+		await self.logQ.put(LogEntry(logging.INFO, self.name, msg))
 	
 	async def exception(self, message = None):
 		sio = io.StringIO()
@@ -70,19 +68,19 @@ class Logger:
 		sio.close()
 		if message is not None:
 			msg = '%s : %s' % (message,msg)
-		await self.logQ.put(LogEntry(logging.ERROR, self.name, msg, self._connection))
+		await self.logQ.put(LogEntry(logging.ERROR, self.name, msg))
 			
 	async def error(self, msg):
-		await self.logQ.put(LogEntry(logging.ERROR, self.name, msg, self._connection))
+		await self.logQ.put(LogEntry(logging.ERROR, self.name, msg))
 		
 	async def warning(self, msg):
-		await self.logQ.put(LogEntry(logging.WARNING, self.name, msg, self._connection))
+		await self.logQ.put(LogEntry(logging.WARNING, self.name, msg))
 		
 	async def log(self, level, msg):
 		"""
 		Level MUST be bigger than 0!!!
 		"""
-		await self.logQ.put(LogEntry(level, self.name, msg, self._connection))
+		await self.logQ.put(LogEntry(level, self.name, msg))
 
 		
 	def add_consumer(self, consumer):

@@ -3,24 +3,29 @@ import asyncio
 from multiplexor.plugins.plugins import *
 from multiplexor.plugins.socks5.socks5protocol import *
 from multiplexor.plugins.socks5.socks5pluginprotocol import *
+from multiplexor.logger.logger import *
 
 class MultiplexorSocks5SocketProxy:
 	def __init__(self):
 		"""
-		Handels the socket after the socks5 setup is completed
+		Handles the socket after the socks5 setup is completed
 		"""
 		self.logger = None
 		self.socket_id = None
 		self.socket_terminated_evt = None
-		self.plugin_broken_evt = None
+		self.stop_plugin_evt = None
 		
 		self.reader = None
 		self.writer = None
 		self.socket_queue_in = None
 		self.socket_queue_out = None
 		
+	def run(self):
+		asyncio.ensure_future(self.proxy_send())
+		asyncio.ensure_future(self.proxy_recv())
+		
 	async def proxy_send(self):
-		while not self.socket_terminated_evt.is_set() or not self.plugin_broken_evt.is_set():
+		while not self.socket_terminated_evt.is_set() or not self.stop_plugin_evt.is_set():
 			#todo: check timeout
 			try:
 				data = await self.reader.read(4096)
@@ -31,101 +36,81 @@ class MultiplexorSocks5SocketProxy:
 				#notifying remote end that socket is terminated
 				cmd = Socks5PluginSocketTerminatedEvent()
 				cmd.socket_id = self.socket_id
-				await self.plugin_out(cmd.to_bytes())
+				await self.socket_queue_out.put(cmd.to_bytes())
 				return
 				
 			else:
 				if not data:
 					#socket terminated...
-					await self.logger.info('reader exception! %s' % e)
+					await self.logger.info('Client terminated the connection!')
 					#notifying reader/writer that socket is terminated
 					self.socket_terminated_evt.set()
 					#notifying remote end that socket is terminated
 					cmd = Socks5PluginSocketTerminatedEvent()
 					cmd.socket_id = self.socket_id
-					await self.plugin_out(cmd.to_bytes())
+					await self.socket_queue_out.put(cmd.to_bytes())
 					return
 					
 				#sending recieved data to the remote agent
 				cmd = Socks5PluginSocketDataCmd()
 				cmd.socket_id = self.socket_id
-				cmd.data = self.data
-				await self.plugin_out(cmd.to_bytes())
+				cmd.data = data
+				await self.socket_queue_out.put(cmd.to_bytes())
 	
 	
 	async def proxy_recv(self):
-		while not self.socket_terminated_evt.is_set() or not self.plugin_broken_evt.is_set():
+		while not self.socket_terminated_evt.is_set() or not self.stop_plugin_evt.is_set():
 			cmd = await self.socket_queue_in.get()
-			if cmd.cmdtype == SOCKET_DATA:
-				writer.write(cmd.data)
+			if cmd.cmdtype == Socks5ServerCmdType.SOCKET_DATA:
+				self.writer.write(cmd.data)
 			
-			elif cmd.cmdtype == SOCKET_TERMINATED_EVT or cmd.cmdtype == PLUGIN_ERROR:
+			elif cmd.cmdtype == Socks5ServerCmdType.SOCKET_TERMINATED_EVT or cmd.cmdtype == Socks5ServerCmdType.PLUGIN_ERROR:
 				#remote agent's socket broken, closing down ours as well
-				writer.close()
-				socket_terminated_evt.set()
+				self.writer.close()
+				self.socket_terminated_evt.set()
 				
 			else:
 				await self.logger.info('Got unexpected command type: %s' % cmd.cmdtype)	
 	
+class Socks5Client:
+	def __init__(self, socket_id, logQ, reader, writer, stop_plugin_evt, plugin_params, plugin_out):
+		self.logger = Logger('Socks5Client', logQ=logQ)
+		self.stop_plugin_evt = stop_plugin_evt
+		self.socket_id = socket_id
+		self.reader = reader
+		self.writer = writer
+		self.plugin_params = plugin_params
+		self.plugin_out = plugin_out
 		
-
-class MultiplexorSocks5(MultiplexorPluginBase):
-	def __init__(self, plugin_id, logQ):
-		MultiplexorPluginBase.__init__(self, plugin_id, 'MultiplexorSocks5', logQ)
 		
 		self.mutual_auth_type = None
 		self.supported_auth_types = [SOCKS5Method.NOAUTH]
 		self.current_state = SOCKS5ServerState.NEGOTIATION
 		self.parser = SOCKS5CommandParser
 		
-		self.plugin_broken_evt = asyncio.Event()
+		self.remote_in = asyncio.Queue()
 		
-		self.dispatch_table = {} #socket_id to destination queue
 		
-		self.current_socket_id = 0
 		
-			
-	async def handle_plugin_data_in(self):
-		while not self.plugin_broken_evt.is_set() or not self.stop_plugin_evt.is_set():
-			data = await self.plugin_in.get()
-			
-			cmd = Socks5PluginCMD.from_bytes(data)
-			if cmd.cmdtype == Socks5ServerCmdType.PLUGIN_CONNECT:
-				await self.dispatch_table[cmd.socket_id].put(cmd)
-				
-			elif cmd.cmdtype == Socks5ServerCmdType.PLUGIN_LISTEN:
-				await self.dispatch_table[cmd.socket_id].put(cmd)
-
-			elif cmd.cmdtype == Socks5ServerCmdType.PLUGIN_UDP:
-				await self.dispatch_table[cmd.socket_id].put(cmd)
-
-			elif cmd.cmdtype == Socks5ServerCmdType.PLUGIN_ERROR:
-				self.plugin_broken_evt.set()
-
-			elif cmd.cmdtype == Socks5ServerCmdType.SOCKET_TERMINATED_EVT:
-				await self.dispatch_table[cmd.socket_id].put(cmd)
-
-			elif cmd.cmdtype == Socks5ServerCmdType.SOCKET_DATA:
-				await self.dispatch_table[cmd.socket_id].put(cmd)
-			else:
-				await self.logger.info('Unknown data in')
-		
-	async def socket_send(self, writer, data):
+	
+	@mpexception
+	async def socket_send(self, data):
 		"""
 		this is just a dumb helper function
 		"""
-		writer.write(data)
-		await writer.drain()
-				
-	async def handle_socks_client(reader, writer):
+		self.writer.write(data)
+		await self.writer.drain()
+	
+	@mpexception
+	async def handle_socks5(self):
 		while not self.stop_plugin_evt.is_set():
-			msg = await self.parser.from_streamreader(reader)
+			msg = await self.parser.from_streamreader(self.reader, self.current_state, self.mutual_auth_type)
 			
 			if self.current_state == SOCKS5ServerState.NEGOTIATION:
 				mutual, mutual_idx = get_mutual_preference(self.supported_auth_types, msg.METHODS)
 				if mutual is None:
 					await self.logger.debug('No common authentication types! Client supports %s' % (','.join([str(x) for x in msg.METHODS])))
-					t = await asyncio.wait_for(self.socket_send(writer, SOCKS5NegoReply.construct_auth(SOCKS5Method.NOTACCEPTABLE).to_bytes()), timeout = 1)
+					t = await asyncio.wait_for(self.socket_send(SOCKS5NegoReply.construct_auth(SOCKS5Method.NOTACCEPTABLE).to_bytes()), timeout = 1)
 					writer.close()
 					return
 				await self.logger.debug('Mutual authentication type: %s' % mutual)
@@ -141,7 +126,7 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 					self.session.current_state = SOCKS5ServerState.NOT_AUTHENTICATED
 				"""
 
-				t = await asyncio.wait_for(self.socket_send(writer, SOCKS5NegoReply.construct(self.mutual_auth_type).to_bytes()), timeout = 1)
+				t = await asyncio.wait_for(self.socket_send( SOCKS5NegoReply.construct(self.mutual_auth_type).to_bytes()), timeout = 1)
 		
 				"""
 				elif self.session.current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
@@ -165,39 +150,41 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 					#setting up socket_id and a dispatch table entry for our new socket
 					#then sending the connection request info to the agent
 					#then waiting for the agent's reply
-					iq = asyncio.Queue()
-					socket_id = str(self.current_socket_id)
-					self.current_socket_id += 1
-					self.dispatch_table[socket_id] = iq
-					
-					
 					cmd = Socks5PluginConnectCmd()
-					cmd.socket_id = socket_id
+					cmd.socket_id = str(self.socket_id)
 					cmd.dst_addr = str(msg.DST_ADDR)
 					cmd.dst_port = str(msg.DST_PORT)
 					
 					await self.plugin_out.put(cmd.to_bytes())
 					
-					agent_reply = await self.dispatch_table[self.current_socket_id].get()
+					print('waiting 4 reply...')
+					agent_reply = await self.remote_in.get()
 					
-					if agent_reply.cmdtype == ServerCMDType.PLUGIN_CONNECT:
+					if agent_reply.cmdtype == Socks5ServerCmdType.PLUGIN_CONNECT:
 						#agent sucsessfully connected to the remote end! cool!
 						#now we need to set up a socket proxy class, and give it the iq queue (that is still in the dispatch table)
 						await self.logger.debug('Connected!')
 						proxy = MultiplexorSocks5SocketProxy()
-						proxy.logger = Logger(plugin_name, logQ)
-						proxy.socket_id = socket_id
+						proxy.logger = Logger('Socks5Proxy', self.logger.logQ)
+						proxy.socket_id = str(self.socket_id)
 						proxy.socket_terminated_evt = asyncio.Event()
 						
-						proxy.reader = reader
-						proxy.writer = writer
-						proxy.socket_queue_in = iq
+						proxy.reader = self.reader
+						proxy.writer = self.writer
+						proxy.socket_queue_in = self.remote_in
 						proxy.socket_queue_out = self.plugin_out
-						proxy.plugin_broken_evt = self.plugin_broken_evt
+						proxy.stop_plugin_evt = self.stop_plugin_evt
+						
+						
+						#in case of succsess we send back the currently listening ip and port
+						la, lp = self.writer.get_extra_info('sockname')
+						rp = SOCKS5Reply.construct(SOCKS5ReplyType.SUCCEEDED, ipaddress.IPv4Address(la), lp)
+						self.writer.write(rp.to_bytes())
+						
 						proxy.run()
 						
 						#also we need to set up an outbound function
-						asyncio.ensure_future(self.handle_socket_data_out(proxy))
+						#asyncio.ensure_future(self.handle_socket_data_out(proxy))
 						
 						#now we wait for the connection to finish
 						await proxy.socket_terminated_evt.wait()
@@ -205,18 +192,86 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 					
 					else:
 						#agent failed to set up the connection :(
-						writer.close()
-						del self.dispatch_table[socket_id]
+						#notifying the socket client
+						rp = SOCKS5Reply.construct(SOCKS5ReplyType.FAILURE, ipaddress.IPv4Address('0.0.0.0'), 0)
+						self.writer.write(rp.to_bytes())
+						
+						self.writer.close()
 						return
 
 			else:
 				t = await asyncio.wait_for(SOCKS5Reply.construct(SOCKS5ReplyType.COMMAND_NOT_SUPPORTED, self.session.allinterface, 0).to_bytes(), timeout = 1)	
-			
-	
+		
+
+
+	@mpexception
 	async def run(self):
+		await self.handle_socks5()
+		
+
+class MultiplexorSocks5(MultiplexorPluginBase):
+	def __init__(self, plugin_id, logQ, plugin_type, plugin_params):
+		MultiplexorPluginBase.__init__(self, plugin_id, 'MultiplexorSocks5', logQ, plugin_type, plugin_params)
+		
+		self.dispatch_table = {} #socket_id to Socks5Client
+		self.current_socket_id = 0
+		
+	@mpexception		
+	async def handle_plugin_data_in(self):
 		while not self.stop_plugin_evt.is_set():
-			server = await asyncio.start_server(handle_socks_client, '127.0.0.1', 0)
-			await server.serve_forever()
+			data = await self.plugin_in.get()
+			print('Got plugin data!')
+			cmd = Socks5PluginCMD.from_bytes(data)
+			print('socks5 plugin got cmd from agent!')
+			print(str(cmd))
+			
+			if cmd.socket_id not in self.dispatch_table and cmd.cmdtype != Socks5ServerCmdType.PLUGIN_ERROR:
+				print('Socket ID is not in the dispatch table %s' % cmd.socket_id)
+				continue
+				
+			if cmd.cmdtype == Socks5ServerCmdType.PLUGIN_CONNECT:
+				await self.dispatch_table[cmd.socket_id].remote_in.put(cmd)
+				
+			elif cmd.cmdtype == Socks5ServerCmdType.PLUGIN_LISTEN:
+				await self.dispatch_table[cmd.socket_id].remote_in.put(cmd)
+
+			elif cmd.cmdtype == Socks5ServerCmdType.PLUGIN_UDP:
+				await self.dispatch_table[cmd.socket_id].remote_in.put(cmd)
+
+			elif cmd.cmdtype == Socks5ServerCmdType.PLUGIN_ERROR:
+				self.stop_plugin_evt.set()
+
+			elif cmd.cmdtype == Socks5ServerCmdType.SOCKET_TERMINATED_EVT:
+				await self.dispatch_table[cmd.socket_id].remote_in.put(cmd)
+
+			elif cmd.cmdtype == Socks5ServerCmdType.SOCKET_DATA:
+				await self.dispatch_table[cmd.socket_id].remote_in.put(cmd)
+			else:
+				await self.logger.info('Unknown data in')
+		
+		print('handle_plugin_data_in exiting!')
+		
+	@mpexception
+	async def handle_socks_client(self, reader, writer):
+		await self.logger.info('Client connected!')
+		self.current_socket_id += 1
+		socket_id = str(self.current_socket_id)
+		client = Socks5Client(socket_id, self.logger.logQ, reader, writer, self.stop_plugin_evt, self.plugin_params, self.plugin_out)
+		self.dispatch_table[socket_id] = client
+		await client.run()
+		await self.logger.info('Client disconnected!')
+		del self.dispatch_table[socket_id]
+		try:
+			writer.close()
+		except:
+			pass
+	
+	@mpexception
+	async def run(self):
+		asyncio.ensure_future(self.handle_plugin_data_in())
+		server = await asyncio.start_server(self.handle_socks_client, '127.0.0.1', 0)
+		print(server.sockets[0].getsockname())
+		await server.serve_forever()
 			
 			
 			

@@ -42,6 +42,7 @@ class Packetizer:
 			self.next_cmd_length = -1
 			await self.logger.debug("Recieved reply: %s" % cmd)
 			await self.multiplexor_in.put(cmd)
+			await asyncio.sleep(0)
 			await self.process_recv_buffer()
 	
 	@mpexception	
@@ -56,10 +57,12 @@ class Packetizer:
 				while not self.trasnport_terminated_evt.is_set() and len(self.send_buffer) > self.max_packet_size:
 					await self.packetizer_out.put(self.send_buffer[:self.max_packet_size])
 					self.send_buffer = self.send_buffer[self.max_packet_size:]
-					await asuncio.sleep(0)
+					await asyncio.sleep(0)
 					
 			if len(self.send_buffer) > 0:
 				await self.packetizer_out.put(self.send_buffer)
+				await asyncio.sleep(0)
+				self.send_buffer = b''
 					
 	@mpexception	
 	async def run(self):

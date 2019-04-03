@@ -17,18 +17,26 @@ class WebsocketsTransportServer:
 	async def handle_packetizer_send(self, agent):
 		while not agent.trasnport_terminated_evt.is_set():
 			data = await agent.packetizer.packetizer_out.get()
-			await agent.transport.send(data)
-	
+			try:
+				await agent.transport.send(data)
+			except websockets.exceptions.ConnectionClosed:
+				agent.trasnport_terminated_evt.set()
+				return
+				
 	@mpexception	
 	async def handle_packetizer_recv(self, agent):
 		while not agent.trasnport_terminated_evt.is_set():
-			data = await agent.transport.recv()
+			try:
+				data = await agent.transport.recv()
+			except websockets.exceptions.ConnectionClosed:
+				agent.trasnport_terminated_evt.set()
+				return
 			await agent.packetizer.packetizer_in.put(data)
 	
 	@mpexception
 	async def handle_agent(self, websocket, path):
 		print('Agent connected!')
-		agent = MultiplexorAgentHandler()
+		agent = MultiplexorAgentHandler(self.logger.logQ)
 		agent.transport = websocket
 		agent.packetizer = Packetizer(self.logger.logQ, agent.trasnport_terminated_evt)
 		

@@ -13,6 +13,7 @@ class MultiplexorServer:
 		self.transports = []
 		self.ophandlers = []
 		self.agents = {}
+		self.operators = {}
 		self.logger = Logger('MultiplexorServer', logQ = logQ)
 		self.shutdown_evt = asyncio.Event()
 		self.agent_dispatch_queue = asyncio.Queue()
@@ -38,6 +39,9 @@ class MultiplexorServer:
 	async def handle_operator_in(self, operator):
 		while not self.shutdown_evt.is_set() or not operator.transport_closed.is_set():
 			op_cmd = await operator.multiplexor_cmd_in.get()
+			if not op_cmd:
+				print('queue broken!')
+				return
 			await self.logger.debug('Operator sent this: %s' % op_cmd)
 			if op_cmd.cmdtype == OperatorCmdType.LIST_AGENTS:
 				rply = OperatorListAgentsRply()
@@ -91,8 +95,11 @@ class MultiplexorServer:
 				except Exception as e:
 					await self.logger.debug('Operator tried to slect and unknown agent %s' % op_cmd.agent_id)
 				else:
-					await self.start_plugin(agent, op_cmd.plugin_type, op_cmd.plugin_data)
-				
+					try:
+						await self.start_plugin(agent, op_cmd.plugin_type, op_cmd.plugin_data)
+					except Exception as e:
+						print(e)
+						return
 				
 			else:
 				await self.logger.debug('Not implemented operator command!')
@@ -100,6 +107,7 @@ class MultiplexorServer:
 	async def handle_new_operator_event(self, ophandler):
 		while not self.shutdown_evt.is_set() or not ophandler.trasnport_terminated_evt.is_set():
 			operator = await ophandler.operator_dispatch_queue.get()
+			self.operators[str(uuid.uuid4())] = operator
 			await self.logger.debug('New operator in!')
 			asyncio.ensure_future(self.handle_operator_in(operator))
 			
@@ -164,27 +172,29 @@ class MultiplexorServer:
 		
 	@mpexception
 	async def start_plugin(self, agent, plugin_type, plugin_params):
-		while not self.shutdown_evt.is_set() or not agent.transport.trasnport_terminated_evt.is_set():
-			plugin_id = agent.plugin_ctr
-			agent.plugin_ctr += 1
+		await self.logger.debug('start_plugin called')
+
+		if plugin_type == PluginType.SOCKS5.value:
+			await self.logger.debug('SOCKS5')
+			plugin_obj = MultiplexorSocks5
 			
-			if plugin_type == PluginType.SOCKS5.value:
-				mp = MultiplexorSocks5(plugin_id, self.logger.logQ)
-				
-			elif plugin_type == PluginType.PYPYKATZ.value:
-				raise Exception('Not implemented')
-			
-			elif plugin_type == PluginType.SSPI.value:
-				raise Exception('Not implemented')
-			
-			plugin = mp.get_plugin()
-			asyncio.ensure_future(mp.start())
-			
-			cmd = MultiplexorPluginStart()
-			cmd.plugin_id = str(plugin_id)
-			cmd.plugin_type = plugin_type
-			cmd.plugin_params = plugin_params
-			await agent.packetizer.multiplexor_out.put(cmd)
+		elif plugin_type == PluginType.PYPYKATZ.value:
+			raise Exception('Not implemented')
+		
+		elif plugin_type == PluginType.SSPI.value:
+			raise Exception('Not implemented')
+		
+		plugin_id = agent.add_plugin(plugin_obj, plugin_type, plugin_params)
+		await self.logger.debug('starting')
+		asyncio.ensure_future(agent.plugins[plugin_id].start())
+		await self.logger.debug('started')
+		cmd = MultiplexorPluginStart()
+		cmd.plugin_id = str(plugin_id)
+		cmd.plugin_type = str(plugin_type)
+		cmd.plugin_params = plugin_params
+		await agent.packetizer.multiplexor_out.put(cmd)
+		await self.logger.debug('plugin start command sent to the client')
+
 	
 	@mpexception
 	async def handle_agent_cmd_in(self, agent):
@@ -195,9 +205,8 @@ class MultiplexorServer:
 			print('Agent %s said this: %s' % (agent.agent_id, cmd))
 			
 	@mpexception
-	async def handle_agent_plugin_out(self, agent):
-		while not self.shutdown_evt.is_set() or not agent.transport.trasnport_terminated_evt.is_set():
-			
+	async def handle_agent_plugin_out(self, plugin):
+		while not self.shutdown_evt.is_set():
 			await agent.packetizer.multiplexor_out.put(cmd)
 	
 	@mpexception
@@ -206,53 +215,72 @@ class MultiplexorServer:
 		while not self.shutdown_evt.is_set() or not agent.trasnport_terminated_evt.is_set():
 			cmd = await agent.packetizer.multiplexor_in.get()
 			if cmd.cmdtype == ServerCMDType.GET_INFO:
-				print(cmd.agent_info)
-				print(cmd.agent_id)
-				self.agents[cmd.agent_id].info = cmd.agent_info
+				await self.logger.debug(cmd.agent_info)
+				#print(cmd.agent_id)
+				agent.info = cmd.agent_info
 				
 			elif cmd.cmdtype == ServerCMDType.PLUGIN_DATA:
-				if not cmd.plugin_id in agent[cmd.agent_id].plugins:
+				if not cmd.plugin_id in agent.plugins:
 					print('Got plugin data from %s for and unknown plugin id %s' % (agent.agent_id, cmd.plugin_id))
 					continue
-				await agent[cmd.agent_id].plugins[cmd.plugin_id].plugin_in_q.put(cmd.plugin_data)
+				print('Dispatching plugin data!')
+				await agent.plugins[cmd.plugin_id].plugin_in.put(cmd.plugin_data)
 				
 			elif cmd.cmdtype == ServerCMDType.AGENT_LOG:
 				#TODO
 				await self.logQ.put(None)
 				
-			elif cmd.cmdtype == ServerCMDType.PLUGIN_START:
-				#TODO
-				await self.logQ.put(None)
+			#elif cmd.cmdtype == ServerCMDType.PLUGIN_START:
+			#	#TODO
+			#	await self.logQ.put(None)
 				
-			elif cmd.cmdtype == ServerCMDType.PLUGIN_STOP:
-				#TODO
-				await self.logQ.put(None)
+			#elif cmd.cmdtype == ServerCMDType.PLUGIN_STOP:
+			#	#TODO
+			#	await self.logQ.put(None)
 			
 			elif cmd.cmdtype == ServerCMDType.PLUGIN_STOPPED_EVT:
-				#TODO
-				await self.logQ.put(None)
+				if not cmd.plugin_id in agent.plugins:
+					print('Got plugin data from %s for and unknown plugin id %s' % (agent.agent_id, cmd.plugin_id))
+					continue
+				await agent.plugins[cmd.plugin_id].plugin_in.put(cmd)
+				await self.logger.info('Plugin stopped')
 				
 			elif cmd.cmdtype == ServerCMDType.PLUGIN_STARTED_EVT:
-				#TODO
-				await self.logQ.put(None)
+				#### Sanity check
+				if not cmd.plugin_id in agent.plugins:
+					print('Got plugin data from %s for and unknown plugin id %s' % (agent.agent_id, cmd.plugin_id))
+					continue
+				#### dispatching th event to the appropriate queue
+				await agent.plugins[cmd.plugin_id].plugin_in.put(cmd)
+				
+				#### notifying all operators of the event
+				rply = OperatorPluginStarted()
+				rply.agent_id = agent.agent_id
+				rply.plugin_id = cmd.plugin_id
+					
+				for k in self.operators:
+					await self.operators[k].multiplexor_cmd_out.put(rply)
+					
+				await self.logger.info('Plugin started')
 	
 	@mpexception
 	async def handle_agent(self, agent):
-		while not self.shutdown_evt.is_set() or not agent.trasnport_terminated_evt.is_set():
-			#agent needs to register before we talk to her...
-			await self.register_agent(agent)
-			if agent.status == AgentStatus.REGISTERED:
-				#by default we poll some basic info on the client...
-				
+		#agent needs to register before we talk to her...
+		await self.register_agent(agent)
+		if agent.status == AgentStatus.REGISTERED:
+			
+			#by default we poll some basic info on the client...
+			if not agent.info:
 				cmd = MultiplexorGetInfo()
 				await agent.packetizer.multiplexor_out.put(cmd)
-				
-				#now starting the main handler loop
-				await self.handle_agent_main(agent)
-				await self.logger.debug('Agent dropped :(')
-			else:
-				print('Agent failed to register, let it go let it go...')
-				break
+			
+			#now starting the main handler loop
+			await self.logger.info('Invoking agent main...')
+			await self.handle_agent_main(agent)
+			await self.logger.debug('Agent dropped :(')
+		else:
+			print('Agent failed to register, let it go let it go...')
+			return
 	
 	@mpexception
 	async def run(self):

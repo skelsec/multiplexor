@@ -43,6 +43,7 @@ class Operator:
 	async def handle_server_out(self):
 		while True:
 			cmd = await self.server_cmd_q.get()
+			
 			await self.ws.send(json.dumps(cmd.to_dict()))
 			print('CMD sent!')
 		

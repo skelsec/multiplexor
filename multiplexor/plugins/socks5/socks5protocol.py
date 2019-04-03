@@ -109,12 +109,6 @@ async def sendall(writer, data):
 		await writer.drain()
 	except Exception as e:
 		raise R3ConnectionClosed()
-		
-
-class SOCKS5ServerMode(enum.Enum):
-	OFF    = enum.auto()
-	NORMAL = enum.auto()
-	EVIL   = enum.auto()
 
 
 class SOCKS5ServerState(enum.Enum):
@@ -184,32 +178,32 @@ class SOCKS5CommandParser:
 	def __init__(self, protocol = socket.SOCK_STREAM):
 		self.protocol = protocol #not used atm
 
-	def parse(self, buff, session):
-		if session.current_state == SOCKS5ServerState.NEGOTIATION:
+	def parse(self, buff, current_state, mutual_auth_type):
+		if current_state == SOCKS5ServerState.NEGOTIATION:
 			return SOCKS5Nego.from_buffer(buff)
 		
-		if session.current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
-			if session.mutual_auth_type == SOCKS5Method.PLAIN:
+		if current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
+			if mutual_auth_type == SOCKS5Method.PLAIN:
 				return SOCKS5PlainAuth.from_buffer(buff)
 			else:
 				raise Exception('Not implemented!')
 
-		if session.current_state == SOCKS5ServerState.REQUEST:
+		if current_state == SOCKS5ServerState.REQUEST:
 			return SOCKS5Request.from_buffer(buff)
 
-	async def from_streamreader(reader, session, timeout = None):
-		if session.current_state == SOCKS5ServerState.NEGOTIATION:
+	async def from_streamreader(reader, current_state, mutual_auth_type, timeout = None):
+		if current_state == SOCKS5ServerState.NEGOTIATION:
 			t = await asyncio.wait_for(SOCKS5Nego.from_streamreader(reader), timeout = timeout)
 			return t
 		
-		if session.current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
-			if session.mutual_auth_type == SOCKS5Method.PLAIN:
+		if current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
+			if mutual_auth_type == SOCKS5Method.PLAIN:
 				t = await asyncio.wait_for(SOCKS5PlainAuth.from_streamreader(reader), timeout = timeout)
 				return t
 			else:
 				raise Exception('Not implemented!')
 
-		if session.current_state == SOCKS5ServerState.REQUEST:
+		if current_state == SOCKS5ServerState.REQUEST:
 			t = await asyncio.wait_for(SOCKS5Request.from_streamreader(reader), timeout = timeout)
 			return t
 

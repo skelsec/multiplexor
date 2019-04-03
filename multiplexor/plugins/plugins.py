@@ -2,34 +2,30 @@ import asyncio
 
 from multiplexor.logger.logger import *
 
+
 class PluginType(enum.Enum):
+	"""
+	Extend this enum when new types are implemented!
+	"""
 	SOCKS5 = 0
 	PYPYKATZ = 1
 	SSPI = 2
-	
-class Plugin:
-	def __init__(self):
-		self.plugin_id = None
-		self.plugin_in = None
-		self.plugin_out = None
-		self.stop_plugin_evt = None
 		
 class MultiplexorPluginBase:
-	def __init__(self, plugin_id, plugin_name, logQ):
+	"""
+	All plugins MUST be inherited from this base class.
+	"""
+
+	def __init__(self, plugin_id, plugin_name, logQ, plugin_type, plugin_params):
 		self.plugin_id = plugin_id
 		self.plugin_name = plugin_name
-		self.logger = Logger(plugin_name, logQ)
+		self.logger = Logger(plugin_name, logQ=logQ)
 		self.plugin_in = asyncio.Queue()
 		self.plugin_out = asyncio.Queue()
 		self.stop_plugin_evt = asyncio.Event()
-		
-	def get_plugin(self):
-		p = Plugin
-		p.plugin_id = self.plugin_id
-		p.plugin_in = self.plugin_in
-		p.plugin_out = self.plugin_out
-		p.stop_plugin_evt = self.stop_plugin_evt
-		return p
+		self.plugin_info = None #should b overridden by the inheritor
+		self.plugin_type = plugin_type
+		self.plugin_params = plugin_params
 	
 	@mpexception
 	async def handle_in_raw(self):

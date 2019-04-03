@@ -1,14 +1,8 @@
 import asyncio
 import enum
 
-class MultiplexorPluginHandler:
-	def __init__(self, plugin_id):
-		self.plugin_id = plugin_id
-		self.plugin_in_q = asyncio.Queue()
-		self.plugin_out_q = asyncio.Queue()
-		self.plugin_terminated_evt = asyncio.Event()
-		
-		self.plugin
+from multiplexor.logger.logger import *
+from multiplexor.protocol.server import *
 		
 class AgentStatus(enum.Enum):
 	CONNECTED = 0,
@@ -18,12 +12,9 @@ class AgentStatus(enum.Enum):
 	TERMINATED = 4
 	
 class MultiplexorAgentHandler:
-	def __init__(self):
+	def __init__(self, logQ):
+		self.logger = Logger('MultiplexorAgentHandler', logQ)
 		self.agent_id = None
-		self.cmd_send_queue = None
-		self.cmd_recv_queue = None
-		
-		### internal stuff
 		self.transport = None
 		self.trasnport_terminated_evt = asyncio.Event()
 		self.packetizer = None
@@ -35,3 +26,20 @@ class MultiplexorAgentHandler:
 		
 		self.info = None
 		
+	@mpexception
+	async def handle_plugin_out(self, plugin):
+		while not plugin.stop_plugin_evt.is_set():
+			data = await plugin.plugin_out.get() #bytes!
+			
+			cmd = MultiplexorPluginData()
+			cmd.plugin_id = plugin.plugin_id
+			cmd.plugin_data = data
+			await self.packetizer.multiplexor_out.put(cmd)
+			await asyncio.sleep(0)
+		
+	def add_plugin(self, plugin_obj, plugin_type, plugin_params):
+		plugin_id = self.plugin_ctr
+		self.plugin_ctr += 1
+		self.plugins[plugin_id] = plugin_obj(plugin_id, self.logger.logQ, plugin_type, plugin_params)
+		asyncio.ensure_future(self.handle_plugin_out(self.plugins[plugin_id]))
+		return plugin_id

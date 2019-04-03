@@ -27,8 +27,11 @@ class OperatorHandler:
 	@mpexception
 	async def handle_incoming_cmds(self, operator):
 		while not operator.transport_closed.is_set():
-			print('waiting on data')
-			data = await operator.websocket.recv()
+			try:
+				data = await operator.websocket.recv()
+			except websockets.exceptions.ConnectionClosed:
+				operator.transport_closed.set()
+				return
 			print(data)
 			cmd = OperatorCmdParser.from_json(data)
 			await operator.multiplexor_cmd_in.put(cmd)
