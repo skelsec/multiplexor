@@ -28,7 +28,12 @@ class MultiplexorAgentHandler:
 		
 	@mpexception
 	async def handle_plugin_out(self, plugin):
-		while not plugin.stop_plugin_evt.is_set():
+		"""
+		This function created one per new plugin started
+		All it does is to wrap the plugin's outgoing bytes to a server command 
+		then dispatches it to the agent's packetizer
+		"""
+		while not self.trasnport_terminated_evt.is_set() or not plugin.stop_plugin_evt.is_set():
 			data = await plugin.plugin_out.get() #bytes!
 			
 			cmd = MultiplexorPluginData()
@@ -36,9 +41,11 @@ class MultiplexorAgentHandler:
 			cmd.plugin_data = data
 			await self.packetizer.multiplexor_out.put(cmd)
 			await asyncio.sleep(0)
+		#at this pont the plugin stopped / agent disconnected
+		del self.plugins[plugin.plugin_id]
 		
 	def add_plugin(self, plugin_obj, plugin_type, plugin_params):
-		plugin_id = self.plugin_ctr
+		plugin_id = str(self.plugin_ctr)
 		self.plugin_ctr += 1
 		self.plugins[plugin_id] = plugin_obj(plugin_id, self.logger.logQ, plugin_type, plugin_params)
 		asyncio.ensure_future(self.handle_plugin_out(self.plugins[plugin_id]))

@@ -15,6 +15,9 @@ class WebsocketsTransportServer:
 			
 	@mpexception	
 	async def handle_packetizer_send(self, agent):
+		"""
+		Gets raw bytes from the packetizer and tsends it to the agent
+		"""
 		while not agent.trasnport_terminated_evt.is_set():
 			data = await agent.packetizer.packetizer_out.get()
 			try:
@@ -25,6 +28,9 @@ class WebsocketsTransportServer:
 				
 	@mpexception	
 	async def handle_packetizer_recv(self, agent):
+		"""
+		Dispatches the data recieved from the agent to the packetizer
+		"""
 		while not agent.trasnport_terminated_evt.is_set():
 			try:
 				data = await agent.transport.recv()
@@ -35,7 +41,12 @@ class WebsocketsTransportServer:
 	
 	@mpexception
 	async def handle_agent(self, websocket, path):
-		print('Agent connected!')
+		"""
+		This function gets invoked on each websocket connection.
+		It creates an agenthandler with it's own packetizer, then notifies the server of the new agent's existense via the agent_dispatch_queue
+		"""
+		remote_ip, remote_port = websocket.remote_address
+		await self.logger.info('Agent connected from %s:%s' % (remote_ip, remote_port))
 		agent = MultiplexorAgentHandler(self.logger.logQ)
 		agent.transport = websocket
 		agent.packetizer = Packetizer(self.logger.logQ, agent.trasnport_terminated_evt)
@@ -47,7 +58,7 @@ class WebsocketsTransportServer:
 		
 		await agent.transport.wait_closed()
 		agent.trasnport_terminated_evt.set()
-		print('Agent disconnected!')
+		await self.logger.info('Agent disconnected! %s:%s' % (remote_ip, remote_port))
 		
 	@mpexception
 	async def run(self):

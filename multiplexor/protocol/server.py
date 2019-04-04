@@ -100,13 +100,13 @@ class MultiplexorPluginStop:
 	@staticmethod
 	def from_cmd(cmd):
 		p = MultiplexorPluginStop()
-		p.plugin_id = int.from_bytes(cmd.params[0], 'big', signed = False)
+		p.plugin_id = cmd.params[0].decode()
 		return p
 		
 	def to_bytes(self):
 		cmd = MultiplexorCMD()
 		cmd.cmdtype = self.cmdtype
-		cmd.params.append(self.plugin_id.to_bytes(4, 'big', signed = False))
+		cmd.params.append(self.plugin_id.encode())
 		return cmd.to_bytes()
 		
 class MultiplexorPluginData:
@@ -118,14 +118,14 @@ class MultiplexorPluginData:
 	@staticmethod
 	def from_cmd(cmd):
 		p = MultiplexorPluginData()
-		p.plugin_id = int.from_bytes(cmd.params[0], 'big', signed = False)
+		p.plugin_id = cmd.params[0].decode()
 		p.plugin_data = cmd.params[1]
 		return p
 		
 	def to_bytes(self):
 		cmd = MultiplexorCMD()
 		cmd.cmdtype = self.cmdtype
-		cmd.params.append(self.plugin_id.to_bytes(4, 'big', signed = False))
+		cmd.params.append(self.plugin_id.encode())
 		cmd.params.append(self.plugin_data)
 		return cmd.to_bytes()
 
@@ -138,15 +138,32 @@ class MultiplexorPluginStoppedEvt:
 	@staticmethod
 	def from_cmd(cmd):
 		p = MultiplexorPluginStoppedEvt()
-		p.plugin_id = int.from_bytes(cmd.params[0], 'big', signed = False)
+		p.plugin_id = cmd.params[0].decode()
 		p.reason = cmd.params[1].decode()
 		return p
 		
 	def to_bytes(self):
 		cmd = MultiplexorCMD()
 		cmd.cmdtype = self.cmdtype
-		cmd.params.append(self.plugin_id.to_bytes(4, 'big', signed = False))
+		cmd.params.append(self.plugin_id.encode())
 		cmd.params.append(self.reason.encode())
+		return cmd.to_bytes()
+		
+class MultiplexorPluginStartedEvt:
+	def __init__(self):
+		self.cmdtype = ServerCMDType.PLUGIN_STARTED_EVT
+		self.plugin_id = None
+	
+	@staticmethod
+	def from_cmd(cmd):
+		p = MultiplexorPluginStartedEvt()
+		p.plugin_id = cmd.params[0].decode()
+		return p
+		
+	def to_bytes(self):
+		cmd = MultiplexorCMD()
+		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.plugin_id.encode())
 		return cmd.to_bytes()
 		
 class MultiplexorAgentLog:
@@ -229,5 +246,6 @@ type2obj = {
 	ServerCMDType.PLUGIN_STOP : MultiplexorPluginStop,
 	ServerCMDType.PLUGIN_DATA : MultiplexorPluginData,
 	ServerCMDType.PLUGIN_STOPPED_EVT : MultiplexorPluginStoppedEvt,
+	ServerCMDType.PLUGIN_STARTED_EVT : MultiplexorPluginStartedEvt,
 	ServerCMDType.AGENT_LOG : MultiplexorAgentLog,
 }

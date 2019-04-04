@@ -6,7 +6,7 @@ from multiplexor.logger.logger import *
 from multiplexor.agenthandler import *
 from multiplexor.protocol.server import *
 from multiplexor.plugins.plugins import *
-from multiplexor.plugins.socks5.socks5plugin import *
+from multiplexor.plugins import *
 
 class MultiplexorServer:
 	def __init__(self, logQ):
@@ -80,13 +80,12 @@ class MultiplexorServer:
 					plugin = agent.plugins[op_cmd.plugin_id]
 					
 				except Exception as e:
-					await self.logger.debug('Operator tried to slect and unknown agent %s and/or unknown pugin id %s' % (op_cmd.agent_id, op_cmd.plugin_id))
+					await self.logger.debug('Operator tried to select and unknown agent %s and/or unknown pugin id %s' % (op_cmd.agent_id, op_cmd.plugin_id))
 				else:
 					rply = OperatorGetPluginInfoRply()
 					rply.agent_id = op_cmd.agent_id
 					rply.plugin_id = op_cmd.plugin_id
-					for k in agent.plugins:
-						rply.plugins.append(k)
+					rply.plugininfo = plugin.plugin_info.to_dict() #all plugin info objects must have a to_dist fucntion!
 					await operator.multiplexor_cmd_out.put(rply)
 				
 			elif op_cmd.cmdtype == OperatorCmdType.START_PLUGIN:
@@ -126,6 +125,16 @@ class MultiplexorServer:
 	##################################################################################################
 	@mpexception
 	async def register_agent(self, agent):
+		"""
+		At the current stage all this function does for registration is:
+		1. assign a uuid to the agent
+		2. generate a random secret
+		3. send the uuid and the secret to the agent
+		4. wait for agent to send the uuid and the secret back
+		
+		in case an agent sends and agent ID and a secret on the first connection we treat it that it's an already existing agent that lost the connection to the server and tries to re-register
+		in that scenario we check if we have that agentid with that secret in our table
+		"""
 		while not self.shutdown_evt.is_set() or not agent.trasnport_terminated_evt.is_set():
 			cmd = await agent.packetizer.multiplexor_in.get()
 			if agent.status == AgentStatus.CONNECTED:
@@ -197,23 +206,11 @@ class MultiplexorServer:
 
 	
 	@mpexception
-	async def handle_agent_cmd_in(self, agent):
-		while not self.shutdown_evt.is_set() or not agent.transport.trasnport_terminated_evt.is_set():
-			
-			#cmd is actually reply
-			
-			print('Agent %s said this: %s' % (agent.agent_id, cmd))
-			
-	@mpexception
-	async def handle_agent_plugin_out(self, plugin):
-		while not self.shutdown_evt.is_set():
-			await agent.packetizer.multiplexor_out.put(cmd)
-	
-	@mpexception
 	async def handle_agent_main(self, agent):
 		#this msut be invoked after succsessful registration!
 		while not self.shutdown_evt.is_set() or not agent.trasnport_terminated_evt.is_set():
 			cmd = await agent.packetizer.multiplexor_in.get()
+			
 			if cmd.cmdtype == ServerCMDType.GET_INFO:
 				await self.logger.debug(cmd.agent_info)
 				#print(cmd.agent_id)
@@ -246,12 +243,13 @@ class MultiplexorServer:
 				await self.logger.info('Plugin stopped')
 				
 			elif cmd.cmdtype == ServerCMDType.PLUGIN_STARTED_EVT:
+				await self.logger.info('Got plugin started event!')
 				#### Sanity check
 				if not cmd.plugin_id in agent.plugins:
 					print('Got plugin data from %s for and unknown plugin id %s' % (agent.agent_id, cmd.plugin_id))
 					continue
 				#### dispatching th event to the appropriate queue
-				await agent.plugins[cmd.plugin_id].plugin_in.put(cmd)
+				#### await agent.plugins[cmd.plugin_id].plugin_in.put(cmd)
 				
 				#### notifying all operators of the event
 				rply = OperatorPluginStarted()
@@ -259,9 +257,13 @@ class MultiplexorServer:
 				rply.plugin_id = cmd.plugin_id
 					
 				for k in self.operators:
+					await self.logger.info('Dispatching event to operator %s' % k)
 					await self.operators[k].multiplexor_cmd_out.put(rply)
 					
 				await self.logger.info('Plugin started')
+				
+		#at this point the agent either lost connection or the server is being stopped
+		del self.agents[agent.agent_id]
 	
 	@mpexception
 	async def handle_agent(self, agent):

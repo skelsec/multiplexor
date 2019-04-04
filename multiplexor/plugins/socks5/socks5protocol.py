@@ -8,6 +8,10 @@ import ipaddress
 import socket
 import asyncio
 
+
+class R3ConnectionClosed(Exception):
+	pass
+
 async def generic_read(reader, n):
 	return reader.read(n)
 

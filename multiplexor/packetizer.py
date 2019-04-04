@@ -20,9 +20,9 @@ class Packetizer:
 	@mpexception
 	async def recv_loop(self):
 		while not self.trasnport_terminated_evt.is_set():
-			print('Waiting for incoming dat from transport...')
+			#print('Waiting for incoming dat from transport...')
 			data = await self.packetizer_in.get()
-			print('Data in: %s' % data)
+			#print('Data in: %s' % data)
 			self.recv_buffer += data
 			await self.process_recv_buffer()
 			
@@ -33,11 +33,11 @@ class Packetizer:
 				
 		if self.next_cmd_length == -1:
 			self.next_cmd_length = int.from_bytes(self.recv_buffer[:4], 'big', signed = False)
-			print('data length: %s' % self.next_cmd_length)
+			#print('data length: %s' % self.next_cmd_length)
 			
 		if len(self.recv_buffer) >= self.next_cmd_length + 4 and self.next_cmd_length != -1:
 			cmd = MultiplexorCMD.from_bytes(self.recv_buffer[4: self.next_cmd_length + 4])
-			print(self.recv_buffer[: self.next_cmd_length + 4])
+			#print(self.recv_buffer[: self.next_cmd_length + 4])
 			self.recv_buffer = self.recv_buffer[self.next_cmd_length + 4:]
 			self.next_cmd_length = -1
 			await self.logger.debug("Recieved reply: %s" % cmd)

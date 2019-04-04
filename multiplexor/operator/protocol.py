@@ -213,7 +213,7 @@ class OperatorPluginStarted:
 		return {
 			'cmdtype' : self.cmdtype.value,
 			'agent_id' : self.agent_id,
-			'plugin_id' : self.plugin_type,
+			'plugin_id' : self.plugin_id,
 		}
 	
 	@staticmethod

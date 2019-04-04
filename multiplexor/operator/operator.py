@@ -4,6 +4,9 @@ import websockets
 
 from .protocol import *
 
+agent_id = ''
+plugin_id = ''
+
 class Operator:
 	def __init__(self):
 		self.server_url = None
@@ -14,6 +17,9 @@ class Operator:
 		self.agents = {}
 		
 	async def handle_server_in(self):
+		global agent_id
+		global plugin_id
+		
 		while True:
 			data = await self.ws.recv()
 			print('RPLY in!')
@@ -38,7 +44,19 @@ class Operator:
 				cmd.plugin_type = 0
 				cmd.plugin_data = None
 				await self.server_cmd_q.put(cmd)
+				
+			elif rply.cmdtype == OperatorCmdType.PLUGIN_STARTED:
+				#just 3 testing making this global
+				agent_id = rply.agent_id
+				plugin_id = rply.plugin_id
+				
+				cmd = OperatorGetPluginInfoCmd()
+				cmd.agent_id = rply.agent_id
+				cmd.plugin_id = rply.plugin_id
+				await self.server_cmd_q.put(cmd)
 			
+			elif rply.cmdtype == OperatorCmdType.GET_PLUGIN_INFO_RPLY:	
+				print(rply.plugininfo)
 		
 	async def handle_server_out(self):
 		while True:
@@ -67,5 +85,12 @@ class Operator:
 		print('Sending command')
 		cmd = OperatorListAgentsCmd()
 		await self.server_cmd_q.put(cmd)
-		await asyncio.sleep(10)
-		
+		while True:
+			await asyncio.sleep(10)
+			if agent_id != '':
+				cmd = OperatorGetPluginInfoCmd()
+				cmd.agent_id = agent_id
+				cmd.plugin_id = plugin_id
+				await self.server_cmd_q.put(cmd)
+			else:
+				print('no plugins started yet :(')
