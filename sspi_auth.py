@@ -5,6 +5,7 @@ import base64
 
 from multiplexor.plugins.sspi.pluginprotocol import *
 from ntlm_test import *
+from winsspi.common.gssapi.asn1_structs import *
 
 ntlm_handler = NTLMAUTHHandler()
 """
@@ -38,12 +39,29 @@ return None
 
 class SSPIAuth:
 	def __init__(self):
-		self.port = '54424'
+		self.port = '55065'
 		self.server_url = 'ws://127.0.0.1:' + self.port
 		
 	async def run(self):
 		self.ws = await websockets.connect(self.server_url)
 		
+		
+		spn_principal = 'srv_http@TEST'
+		ac = SSPIKerberosAuthCmd()
+		ac.client_name = None
+		ac.cred_usage = '3'
+		ac.target_name = spn_principal
+		await self.ws.send(json.dumps(ac.to_dict()))
+		data = await self.ws.recv()
+		rply = SSPIPluginCMD.from_dict(json.loads(data))
+		print(rply.authdata)
+		
+		token = InitialContextToken.load(base64.b64decode(rply.authdata))
+		print(token.native['innerContextToken'])
+		
+		
+		
+		"""
 		ac = SSPINTLMAuthCmd()
 		ac.client_name = None
 		ac.cred_usage = '3'
@@ -65,7 +83,7 @@ class SSPIAuth:
 		status, challenge, creds = ntlm_handler.do_AUTH(base64.b64decode(rply.authdata))
 		for cred in creds:
 			print(str(cred.to_credential()))
-		
+		"""
 		
 		
 	

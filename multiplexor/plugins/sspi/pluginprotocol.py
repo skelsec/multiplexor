@@ -90,24 +90,114 @@ class SSPIConnectCmd:
 		cmd.params.append(self.session_id)
 		return cmd.to_bytes()
 		
+class SSPIKerberosAuthCmd:
+	def __init__(self):
+		self.cmdtype = SSPICmdType.KERBEROS_AUTH
+		self.session_id = None
+		self.client_name = None
+		self.cred_usage = None
+		self.flags = None
+		self.target_name = None
+		
+	def to_dict(self):
+		return {
+			'cmdtype' : self.cmdtype.value,
+			'client_name' : self.client_name ,
+			'cred_usage' : self.cred_usage ,
+			'target_name' : self.target_name ,
+			'flags': self.flags ,
+		}
+		
+	def from_dict(d):
+		c = SSPIKerberosAuthCmd()
+		c.client_name = d['client_name']
+		c.cred_usage = d['cred_usage']
+		c.target_name = d['target_name']
+		c.flags = d['flags']
+		
+		return c
+	
+	@staticmethod
+	def from_cmd(cmd):
+		p = SSPIKerberosAuthCmd()
+		p.session_id = cmd.params[0]
+		p.client_name = cmd.params[1]
+		p.cred_usage = cmd.params[2]
+		p.target_name = cmd.params[3]
+		p.flags = cmd.params[4]
+		return p
+		
+	def to_bytes(self):
+		cmd = SSPIPluginCMD()
+		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.session_id)
+		cmd.params.append(self.client_name)
+		cmd.params.append(self.cred_usage)
+		cmd.params.append(self.target_name)
+		cmd.params.append(self.flags)
+		return cmd.to_bytes()
+		
+class SSPIKerberosAuthRply:
+	def __init__(self):
+		self.cmdtype = SSPICmdType.KERBEROS_AUTH_RPLY
+		self.session_id = None
+		self.result = None
+		self.authdata = None
+
+	@staticmethod
+	def from_cmd(cmd):
+		p = SSPIKerberosAuthRply()
+		p.session_id = cmd.params[0]
+		p.result = cmd.params[1]
+		p.authdata = cmd.params[2]
+		return p
+		
+	def to_dict(self):
+		return {
+			'cmdtype' : self.cmdtype.value,
+			'result' : self.result ,
+			'authdata' : self.authdata ,	
+		}
+		
+	def from_dict(d):
+		c = SSPIKerberosAuthRply()
+		c.result = d.get('result')
+		c.authdata = d.get('authdata')
+		
+		return c
+		
+	def to_bytes(self):
+		cmd = SSPIPluginCMD()
+		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.session_id)
+		cmd.params.append(self.result)
+		cmd.params.append(self.authdata)
+		return cmd.to_bytes()
+		
 class SSPINTLMAuthCmd:
 	def __init__(self):
 		self.cmdtype = SSPICmdType.NTLM_AUTH
 		self.session_id = None
 		self.client_name = None
 		self.cred_usage = None
+		self.target_name = None
+		self.flags = None
 		
 	def to_dict(self):
 		return {
 			'cmdtype' : self.cmdtype.value,
 			'client_name' : self.client_name ,
 			'cred_usage' : self.cred_usage ,	
+			'target_name' : self.target_name ,	
+			'flags' : self.flags ,	
 		}
 		
 	def from_dict(d):
 		c = SSPINTLMAuthCmd()
-		c.client_name = d['client_name']
-		c.cred_usage = d['cred_usage']
+		c.client_name = d.get('client_name')
+		c.cred_usage = d.get('cred_usage')
+		c.target_name = d.get('target_name')
+		c.flags = d.get('flags')
 		
 		return c
 	
@@ -117,6 +207,8 @@ class SSPINTLMAuthCmd:
 		p.session_id = cmd.params[0]
 		p.client_name = cmd.params[1]
 		p.cred_usage = cmd.params[2]
+		p.target_name = cmd.params[3]
+		p.flags = cmd.params[4]
 		return p
 		
 	def to_bytes(self):
@@ -125,6 +217,8 @@ class SSPINTLMAuthCmd:
 		cmd.params.append(self.session_id)
 		cmd.params.append(self.client_name)
 		cmd.params.append(self.cred_usage)
+		cmd.params.append(self.target_name)
+		cmd.params.append(self.flags)
 		return cmd.to_bytes()
 		
 class SSPINTLMAuthRply:
@@ -169,23 +263,31 @@ class SSPINTLMChallengeCmd:
 		self.cmdtype = SSPICmdType.NTLM_CHALLENGE
 		self.session_id = None
 		self.token = None
+		self.flags = None
+		self.target_name = None
 		
 	@staticmethod
 	def from_cmd(cmd):
 		p = SSPINTLMChallengeCmd()
 		p.session_id = cmd.params[0]
-		p.authdata = cmd.params[1]
+		p.token = cmd.params[1]
+		p.flags = cmd.params[2]
+		p.target_name = cmd.params[3]
 		return p
 		
 	def to_dict(self):
 		return {
 			'cmdtype' : self.cmdtype.value,
 			'token' : self.token ,
+			'flags' : self.flags ,
+			'target_name' : self.target_name ,
 		}
 		
 	def from_dict(d):
 		c = SSPINTLMChallengeCmd()
 		c.token = d['token']
+		c.flags = d.get('flags')
+		c.target_name = d.get('target_name')
 		return c
 		
 	def to_bytes(self):
@@ -193,6 +295,8 @@ class SSPINTLMChallengeCmd:
 		cmd.cmdtype = self.cmdtype
 		cmd.params.append(self.session_id)
 		cmd.params.append(self.token)
+		cmd.params.append(self.flags)
+		cmd.params.append(self.target_name)
 		return cmd.to_bytes()
 		
 
@@ -415,8 +519,8 @@ type2obj = {
 	SSPICmdType.NTLM_AUTH_RPLY : SSPINTLMAuthRply,
 	SSPICmdType.NTLM_CHALLENGE : SSPINTLMChallengeCmd,
 	SSPICmdType.NTLM_CHALLENGE_RPLY : SSPINTLMChallengeRply,
-	SSPICmdType.KERBEROS_AUTH : None,
-	SSPICmdType.KERBEROS_AUTH_RPLY : None,
+	SSPICmdType.KERBEROS_AUTH : SSPIKerberosAuthCmd,
+	SSPICmdType.KERBEROS_AUTH_RPLY : SSPIKerberosAuthRply,
 	SSPICmdType.DecryptMessage : None,
 	SSPICmdType.DecryptMessageRply : None,
 	SSPICmdType.EncryptMessage : None,
