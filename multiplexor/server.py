@@ -186,11 +186,12 @@ class MultiplexorServer:
 		if plugin_type == PluginType.SOCKS5.value:
 			await self.logger.debug('SOCKS5')
 			plugin_obj = MultiplexorSocks5
-			
-		elif plugin_type == PluginType.PYPYKATZ.value:
-			raise Exception('Not implemented')
 		
 		elif plugin_type == PluginType.SSPI.value:
+			await self.logger.debug('SOCKS5')
+			plugin_obj = MultiplexorSSPI
+		
+		else:
 			raise Exception('Not implemented')
 		
 		plugin_id = agent.add_plugin(plugin_obj, plugin_type, plugin_params)

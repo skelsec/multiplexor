@@ -8,8 +8,7 @@ class PluginType(enum.Enum):
 	Extend this enum when new types are implemented!
 	"""
 	SOCKS5 = 0
-	PYPYKATZ = 1
-	SSPI = 2
+	SSPI = 1
 		
 class MultiplexorPluginBase:
 	"""
