@@ -15,6 +15,7 @@ class Operator:
 		self.multiplexor_cmd_out = asyncio.Queue()
 		self.transport_closed = asyncio.Event()
 
+
 	async def process_log(self, logmsg):
 		if not self.transport_closed.is_set():
 			try:
@@ -26,7 +27,7 @@ class Operator:
 
 				await self.websocket.send(json.dumps(t.to_dict()))
 			except Exception as e:
-				await self.logger.error(e)
+				await self.logger.error(str(e))
 
 class OperatorHandler:
 	def __init__(self, listen_ip, listen_port, logQ, sslctx = None):

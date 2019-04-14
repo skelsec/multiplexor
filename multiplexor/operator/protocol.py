@@ -89,9 +89,9 @@ class OperatorListAgentsRply:
 		return t
 		
 class OperatorGetAgentInfoCmd:
-	def __init__(self):
+	def __init__(self, agent_id = None):
 		self.cmdtype = OperatorCmdType.GET_AGENT_INFO
-		self.agent_id= None
+		self.agent_id= agent_id
 		
 	def to_dict(self):
 		return {
@@ -126,10 +126,9 @@ class OperatorGetAgentInfoRply:
 		return t
 		
 class OperatorListPluginsCmd:
-	def __init__(self):
+	def __init__(self, agent_id = None):
 		self.cmdtype = OperatorCmdType.GET_PLUGINS
-		self.agent_id = None
-		self.plugin_id = None
+		self.agent_id = agent_id
 		
 	def to_dict(self):
 		return {
@@ -141,12 +140,11 @@ class OperatorListPluginsCmd:
 	def from_dict(d):
 		t = OperatorListPluginsCmd()
 		t.agent_id = d['agent_id']
-		t.plugin_id = d['plugin_id']
 		return t
 		
 class OperatorListPluginsRply:
 	def __init__(self):
-		seld.cmdtype = OperatorCmdType.GET_PLUGINS_RPLY
+		self.cmdtype = OperatorCmdType.GET_PLUGINS_RPLY
 		self.agent_id = None
 		self.plugins = []
 		
@@ -165,10 +163,10 @@ class OperatorListPluginsRply:
 		return t
 		
 class OperatorGetPluginInfoCmd:
-	def __init__(self):
+	def __init__(self, agent_id = None, plugin_id = None):
 		self.cmdtype = OperatorCmdType.GET_PLUGIN_INFO
-		self.agent_id = None
-		self.plugin_id = None
+		self.agent_id = agent_id
+		self.plugin_id = plugin_id
 		
 	def to_dict(self):
 		return {
@@ -208,20 +206,23 @@ class OperatorGetPluginInfoRply:
 		return t
 
 class OperatorStartPlugin:
-	def __init__(self):
+	def __init__(self, agent_id = None, plugin_type = None, plugin_data = None, operator_token = None):
 		self.cmdtype = OperatorCmdType.START_PLUGIN
-		self.agent_id = None
-		self.plugin_type = None
-		self.plugin_data = None
-		self.operator_token = None #operator token is there to identify the plugin creation success/failure
+		self.agent_id = agent_id
+		self.plugin_type = plugin_type
+		
+		self.server = {} #startup parameters for the multiplexor server
+		self.agent = {} #startup parameters for the remote agent
+		
+		#self.operator_token = operator_token #operator token is there to identify the plugin creation success/failure
 		
 	def to_dict(self):
 		return {
 			'cmdtype' : self.cmdtype.value,
 			'agent_id' : self.agent_id,
 			'plugin_type' : self.plugin_type,
-			'plugin_data' : self.plugin_data,
-			'operator_token' : self.operator_token,
+			'server' : self.server.to_dict() if self.server else None,
+			'agent' : self.agent.to_dict() if self.agent else None,
 		}
 	
 	@staticmethod
@@ -229,8 +230,8 @@ class OperatorStartPlugin:
 		t = OperatorStartPlugin()
 		t.agent_id = d['agent_id']
 		t.plugin_type = d['plugin_type']
-		t.plugin_data = d['plugin_data']
-		t.operator_token = d['operator_token']
+		t.server = d.get('server') if d.get('server') else None
+		t.agent = d.get('agent') if d.get('agent') else None
 		return t
 		
 class OperatorPluginStarted:
@@ -280,17 +281,17 @@ class OperatorPluginStopped:
 		return t
 
 class OperatorPluginData:
-	def __init__(self):
+	def __init__(self, agent_id = None, plugin_id = None, data = None):
 		self.cmdtype = OperatorCmdType.PLUGIN_DATA_EVT
-		self.agent_id = None
-		self.plugin_id = None
-		self.data = None
+		self.agent_id = agent_id
+		self.plugin_id = plugin_id
+		self.data = data
 		
 	def to_dict(self):
 		return {
 			'cmdtype' : self.cmdtype.value,
 			'agent_id' : self.agent_id,
-			'plugin_id' : self.plugin_type,
+			'plugin_id' : self.plugin_id,
 			'data' : self.data,
 		}
 	
@@ -315,4 +316,5 @@ type2obj = {
 	OperatorCmdType.PLUGIN_STARTED : OperatorPluginStarted,
 	OperatorCmdType.PLUGIN_STOPPED : OperatorPluginStopped,
 	OperatorCmdType.PLUGIN_DATA_EVT : OperatorPluginData,
+	OperatorCmdType.LOG_EVT : OperatorLogEvent,
 }

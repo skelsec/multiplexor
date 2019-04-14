@@ -95,10 +95,19 @@ class MultiplexorServer:
 					await self.logger.debug('Operator tried to slect and unknown agent %s' % op_cmd.agent_id)
 				else:
 					try:
-						await self.start_plugin(agent, op_cmd.plugin_type, op_cmd.plugin_data)
+						await self.start_plugin(operator, agent, op_cmd)
 					except Exception as e:
 						print(e)
 						return
+						
+			elif op_cmd.cmdtype == OperatorCmdType.PLUGIN_DATA_EVT:
+				try:
+					agent = self.agents[op_cmd.agent_id]
+					plugin = agent.plugins[op_cmd.plugin_id]					
+				except Exception as e:
+					await self.logger.debug('Operator tried to select and unknown agent %s and/or unknown pugin id %s' % (op_cmd.agent_id, op_cmd.plugin_id))
+				else:
+					await plugin.plugin_out.put(bytes.fromhex(op_cmd.data))
 				
 			else:
 				await self.logger.debug('Not implemented operator command!')
@@ -191,31 +200,48 @@ class MultiplexorServer:
 				return
 		
 	@mpexception
-	async def start_plugin(self, agent, plugin_type, plugin_params):
+	async def start_plugin(self, operator, agent, cmd): #plugin_type, plugin_params
 		await self.logger.debug('start_plugin called')
+		print(cmd.plugin_type)
+		pp = None #plugin parameters object or none
+		if cmd.server['remote'] == True:
+			#inserting the operator and the agent_id parameter into the startup params
+			#these are needed for the remoting only
+			
+			cmd.server['operator'] = operator
+			cmd.server['agent_id'] = agent.agent_id
+			
+			await self.logger.debug('REMOTE')
+			plugin_obj = MultiplexorRemoting
+			
+		if cmd.plugin_type == PluginType.SOCKS5.value:
+			await self.logger.debug('SOCKS5')
 
-		if plugin_type == PluginType.SOCKS5.value:
-			await self.logger.debug('SOCKS5')
-			plugin_obj = MultiplexorSocks5
+			if cmd.agent:
+				pp = Socks5PluginAgentStartupSettings.from_dict(cmd.agent)
+			
+			if cmd.server['remote'] == False:
+				plugin_obj = MultiplexorSocks5
 		
-		elif plugin_type == PluginType.SSPI.value:
-			await self.logger.debug('SOCKS5')
-			plugin_obj = MultiplexorSSPI
+		elif cmd.plugin_type == PluginType.SSPI.value:
+			await self.logger.debug('SSPI')
+			if cmd.server['remote'] == False:
+				plugin_obj = MultiplexorSSPI
 		
 		else:
 			raise Exception('Not implemented')
 		
-		plugin_id = agent.add_plugin(plugin_obj, plugin_type, plugin_params)
+		plugin_id = agent.add_plugin(plugin_obj, cmd)
 		await self.logger.debug('starting')
 		asyncio.ensure_future(agent.plugins[plugin_id].start())
 		await self.logger.debug('started')
-		cmd = MultiplexorPluginStart()
-		cmd.plugin_id = str(plugin_id)
-		cmd.plugin_type = str(plugin_type)
-		cmd.plugin_params = plugin_params
-		await agent.packetizer.multiplexor_out.put(cmd)
+		
+		mcmd = MultiplexorPluginStart()
+		mcmd.plugin_id = str(plugin_id)
+		mcmd.plugin_type = str(cmd.plugin_type)
+		mcmd.plugin_params = pp.to_list() if pp else pp  #only passing the plugin params that the remote agent needs, usually none
+		await agent.packetizer.multiplexor_out.put(mcmd)
 		await self.logger.debug('plugin start command sent to the client')
-
 	
 	@mpexception
 	async def handle_agent_main(self, agent):
@@ -263,6 +289,7 @@ class MultiplexorServer:
 				rply = OperatorPluginStarted()
 				rply.agent_id = agent.agent_id
 				rply.plugin_id = cmd.plugin_id
+				rply.operator_token = cmd.operator_token
 					
 				for k in self.operators:
 					await self.logger.info('Dispatching event to operator %s' % k)

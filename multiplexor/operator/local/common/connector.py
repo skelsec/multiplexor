@@ -1,8 +1,9 @@
 import asyncio
-import weboskcets
+import websockets
 
 from multiplexor.operator.protocol import *
 from multiplexor.logger.logger import *
+
 
 
 class MultiplexorOperatorConnector:
@@ -14,25 +15,36 @@ class MultiplexorOperatorConnector:
 
 		self.cmd_out_q = asyncio.Queue()
 		self.cmd_in_q = asyncio.Queue()
-		self.server_diconnected = asyncio.Event()
-		self.ws = None
+		self.server_connected = asyncio.Event() #this variable is used to signel status towards the modules
 
-
-	async def cmd_in(self):
-		while not self.server_diconnected.is_set():
-			data = await self.ws.recv()
-			cmd = 
+	@mpexception
+	async def cmd_in(self, ws):
+		while ws and ws.open:
+			data = await ws.recv()
+			print('RAW in: %s' % data)
+			cmd = OperatorCmdParser.from_json(data)
 			await self.cmd_in_q.put(cmd)
 
-	async def cmd_out(self):
-		while not self.server_diconnected.is_set():
+	@mpexception
+	async def cmd_out(self, ws):
+		while ws and ws.open:
 			rply = await self.cmd_out_q.get()
-			await self.ws.send(json.dumps(rply.to_dict()))
+			await ws.send(json.dumps(rply.to_dict()))
 
 
 	async def run(self):
 		while True:
-			self.logger.info('Connecting to server')
-			self.ws = await websockets.connect(self.server_url)
-			self.logger.info('Connection lost to server! Reconnecting in %s seconds' % self.reconnect_interval)
-			asyncio.sleep(self.reconnect_interval)
+			await self.logger.info('Connecting to server')
+			try:
+				ws = await websockets.connect(self.server_url)
+				asyncio.ensure_future(self.cmd_in(ws))
+				asyncio.ensure_future(self.cmd_out(ws))
+				self.server_connected.set()
+				await ws.wait_closed()
+				self.server_connected.clear()
+				
+			except Exception as e:
+				await self.logger.info('Error connecting to server! Reason: %s' % e)
+			else:
+				await self.logger.info('Connection lost to server! Reconnecting in %s seconds' % self.reconnect_interval)
+			await asyncio.sleep(self.reconnect_interval)

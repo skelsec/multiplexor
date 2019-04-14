@@ -42,11 +42,11 @@ class MultiplexorAgentHandler:
 			await self.packetizer.multiplexor_out.put(cmd)
 			await asyncio.sleep(0)
 		#at this pont the plugin stopped / agent disconnected
-		del self.plugins[plugin.plugin_id]
+		del self.plugins[plugin.plugin_id]		
 		
-	def add_plugin(self, plugin_obj, plugin_type, plugin_params):
+	def add_plugin(self, plugin_obj, cmd):
 		plugin_id = str(self.plugin_ctr)
 		self.plugin_ctr += 1
-		self.plugins[plugin_id] = plugin_obj(plugin_id, self.logger.logQ, plugin_type, plugin_params)
+		self.plugins[plugin_id] = plugin_obj(plugin_id, self.logger.logQ, cmd.plugin_type, cmd.server)
 		asyncio.ensure_future(self.handle_plugin_out(self.plugins[plugin_id]))
 		return plugin_id

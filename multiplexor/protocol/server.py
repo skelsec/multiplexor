@@ -70,7 +70,7 @@ class MultiplexorPluginStart:
 		self.cmdtype = ServerCMDType.PLUGIN_START
 		self.plugin_type = None
 		self.plugin_id = None
-		self.plugin_params = None
+		self.plugin_params = []
 		
 	@staticmethod
 	def from_cmd(cmd):
@@ -79,7 +79,8 @@ class MultiplexorPluginStart:
 		if len(cmd.params) > 0:
 			p.plugin_id = cmd.params[1].decode()
 		if len(cmd.params) > 1:
-			p.plugin_params = cmd.params[2].decode()
+			for i in range(2, cmd.params):
+				p.plugin_params.append(cmd.params[i].decode())
 		return p
 		
 	def to_bytes(self):
@@ -89,7 +90,8 @@ class MultiplexorPluginStart:
 		if self.plugin_id:
 			cmd.params.append(self.plugin_id.encode())
 			if self.plugin_params:
-				cmd.params.append(self.plugin_params.encode())
+				for p in self.plugin_params:
+					cmd.params.append(p.encode())
 		return cmd.to_bytes()
 		
 class MultiplexorPluginStop:
@@ -153,17 +155,22 @@ class MultiplexorPluginStartedEvt:
 	def __init__(self):
 		self.cmdtype = ServerCMDType.PLUGIN_STARTED_EVT
 		self.plugin_id = None
+		self.operator_token = None
 	
 	@staticmethod
 	def from_cmd(cmd):
 		p = MultiplexorPluginStartedEvt()
 		p.plugin_id = cmd.params[0].decode()
+		if len(cmd.params) > 1:
+			p.operator_token = cmd.params[1].decode()
 		return p
 		
 	def to_bytes(self):
 		cmd = MultiplexorCMD()
 		cmd.cmdtype = self.cmdtype
 		cmd.params.append(self.plugin_id.encode())
+		if self.operator_token:
+			cmd.params.append(self.operator_token.encode())
 		return cmd.to_bytes()
 		
 class MultiplexorAgentLog:

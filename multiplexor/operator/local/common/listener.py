@@ -1,5 +1,5 @@
 import asyncio
-import weboskcets
+import websockets
 
 from multiplexor.operator.protocol import *
 from multiplexor.logger.logger import *
