@@ -13,7 +13,7 @@ relaySocket.onerror = function (event) {
 };
 
 relaySocket.onclose = function(event) {
-  console.log("Relay websocket is closed now.");
+  console.log("Relay websocket is closed now. Reason: ", event.code);
   relayScoketState = "closed";
 };
 relaySocket.onmessage = function(event) {

@@ -21,7 +21,6 @@ class MultiplexorOperatorConnector:
 	async def cmd_in(self, ws):
 		while ws and ws.open:
 			data = await ws.recv()
-			print('RAW in: %s' % data)
 			cmd = OperatorCmdParser.from_json(data)
 			await self.cmd_in_q.put(cmd)
 

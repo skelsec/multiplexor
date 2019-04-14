@@ -4,6 +4,7 @@ import json
 
 from multiplexor.plugins.plugins import *
 from multiplexor.plugins.sspi.pluginprotocol import *
+from multiplexor.plugins.sspi.plugininfo import *
 from multiplexor.logger.logger import *
 	
 class SSPIClient:
@@ -110,10 +111,16 @@ class MultiplexorSSPI(MultiplexorPluginBase):
 			
 	async def setup(self):
 		self.plugin_info = WinAPIPluginInfo()
+		listen_ip = '127.0.0.1'
+		listen_port = 0
 		if self.plugin_params:
-			raise Exception('Not implemented!')
-		else:
-			self.server = await websockets.serve(self.handle_client, '127.0.0.1', 0, ssl=None)
+			print(self.plugin_params)
+			if self.plugin_params['listen_ip'] and self.plugin_params['listen_ip'].upper() != 'NONE':
+				listen_ip = self.plugin_params['listen_ip']
+			if self.plugin_params['listen_port'] and self.plugin_params['listen_port'].upper() != 'NONE':
+				listen_port = int(self.plugin_params['listen_port'])
+				
+		self.server = await websockets.serve(self.handle_client, '127.0.0.1', 0, ssl=None)
 		
 		self.plugin_info.listen_ip, self.plugin_info.listen_port = self.server.sockets[0].getsockname()
 		await self.logger.info('SSPI Server is now listening on %s:%s' % (self.plugin_info.listen_ip, self.plugin_info.listen_port))
@@ -127,20 +134,3 @@ class MultiplexorSSPI(MultiplexorPluginBase):
 		asyncio.ensure_future(self.handle_plugin_data_in())
 		await self.server.wait_closed()
 			
-			
-class WinAPIPluginInfo:
-	def __init__(self):
-		self.listen_ip = None
-		self.listen_port = None
-		self.auth_type = None
-		self.active_connections = {} #source addr - > dst_addr
-		
-	def to_dict(self):
-		return {
-			'listen_ip'   : str(self.listen_ip) ,
-			'listen_port' : str(self.listen_port) ,
-			'auth_type' : self.auth_type ,
-			'active_connections' : self.active_connections ,
-		}
-	def to_json(self):
-		return json.dumps(self.to_dict())

@@ -202,7 +202,7 @@ class MultiplexorServer:
 	@mpexception
 	async def start_plugin(self, operator, agent, cmd): #plugin_type, plugin_params
 		await self.logger.debug('start_plugin called')
-		print(cmd.plugin_type)
+		print(str(cmd))
 		pp = None #plugin parameters object or none
 		if cmd.server['remote'] == True:
 			#inserting the operator and the agent_id parameter into the startup params
@@ -214,7 +214,7 @@ class MultiplexorServer:
 			await self.logger.debug('REMOTE')
 			plugin_obj = MultiplexorRemoting
 			
-		if cmd.plugin_type == PluginType.SOCKS5.value:
+		if int(cmd.plugin_type) == PluginType.SOCKS5.value:
 			await self.logger.debug('SOCKS5')
 
 			if cmd.agent:
@@ -223,8 +223,12 @@ class MultiplexorServer:
 			if cmd.server['remote'] == False:
 				plugin_obj = MultiplexorSocks5
 		
-		elif cmd.plugin_type == PluginType.SSPI.value:
+		elif int(cmd.plugin_type) == PluginType.SSPI.value:
 			await self.logger.debug('SSPI')
+			
+			if cmd.agent:
+				pp = SSPIPluginAgentStartupSettings.from_dict(cmd.agent)
+				
 			if cmd.server['remote'] == False:
 				plugin_obj = MultiplexorSSPI
 		

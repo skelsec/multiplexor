@@ -3,6 +3,7 @@ import asyncio
 from multiplexor.operator.local.common.connector import *
 from multiplexor.operator.local.common.listener import *
 from multiplexor.operator.local.socks5 import *
+from multiplexor.operator.local.sspi import *
 
 """
 This script is mainly used for testing or to start plugins and let them run.
@@ -53,13 +54,19 @@ async def main(args):
 			cmd = OperatorListPluginsCmd(args.agentid)
 			await connector.cmd_out_q.put(cmd)
 			
+	elif args.command == 'plugin':
+		if args.cmd == 'info':
+			cmd = OperatorGetPluginInfoCmd(args.agentid, args.pluginid)
+			await connector.cmd_out_q.put(cmd)
+			
+			
 	elif args.command == 'create':
 		if args.type == 'socks5':
-			if args.remote:
-				plugin_type = args.type
-				plugin_data = args.startup_data
-				operator_token = str(uuid.uuid4())
-				cmd = OperatorStartPlugin(args.agentid, plugin_type, plugin_data, operator_token)
+			if args.remote == False:
+				cmd = OperatorStartPlugin()
+				cmd.agent_id = args.agentid
+				cmd.plugin_type = PluginType.SOCKS5.value
+				cmd.server = Socks5PluginServerStartupSettings(listen_ip = args.listen_ip, listen_port = args.listen_port, auth_type = None, remote = False)
 				await connector.cmd_out_q.put(cmd)
 			
 			else:
@@ -71,14 +78,19 @@ async def main(args):
 			
 			
 		elif args.type == 'sspi':
-			raise Exception('Not implemented!')
-			#plugin_type = args.type
-			#plugin_data
-			#operator_token = ''
-			#cmd = OperatorStartPlugin(args.agentid, plugin_type, plugin_data, operator_token)
-			#await connector.cmd_out_q.put(cmd)
+			if args.remote == False:
+				#cmd = OperatorStartPlugin()
+				cmd.agent_id = args.agentid
+				cmd.plugin_type = PluginType.SSPI.value
+				cmd.server = Socks5PluginServerStartupSettings(listen_ip = args.listen_ip, listen_port = args.listen_port, auth_type = None, remote = False)
+				await connector.cmd_out_q.put(cmd)
 			
-		
+			else:
+				#this passes all controls over to the local sock5server object
+				#exits the function when socks5 server is terminated
+				so = MultiplexorSSPIOperator(logger.logQ, connector, args.agentid)
+				await so.run()
+				return
 
 
 	## waiting for replies
@@ -109,7 +121,7 @@ if __name__ == '__main__':
 	plugin_group = subparsers.add_parser('plugin', help='Server related commands')
 	plugin_group.add_argument('agentid', help='agent ID')
 	plugin_group.add_argument('pluginid', help='plugin ID')
-	plugin_group.add_argument('cmd', choices=['info','stop'], help='command')
+	plugin_group.add_argument('cmd', choices=['info'], help='command')
 	
 	create_plugin_group = subparsers.add_parser('create', help='Starts a plugin on the agent')
 	create_plugin_group.add_argument('agentid', help='agent ID')

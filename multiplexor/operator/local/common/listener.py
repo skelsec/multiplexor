@@ -19,38 +19,47 @@ class MultiplexorOperatorListener:
 
 		self.cmd_out_q = asyncio.Queue()
 		self.cmd_in_q = asyncio.Queue()
-		self.server_diconnected = asyncio.Event()
-		self.ws = None
+		self.server_connected = asyncio.Event() #this event is for other objects, do not remove!
 
-
-	async def cmd_in(self):
-		while not self.server_diconnected.is_set():
+	@mpexception
+	async def cmd_in(self, ws):
+		while ws.open:
 			data = await self.ws.recv()
 			rply = OperatorCmdParser.from_json(data)
 			await self.cmd_in_q.put(rply)
 
-	async def cmd_out(self):
-		while not self.server_diconnected.is_set():
+	@mpexception
+	async def cmd_out(self, ws):
+		while ws.open:
 			cmd = await self.cmd_out_q.get()
 			await self.ws.send(json.dumps(cmd.to_dict()))
 
+	@mpexception
 	async def handle_server(self, ws, path):
 		"""
 		be careful, this class will handle only one incoming server traffic!
 		"""
-		if not self.server_diconnected.is_set():
-			self.logger.error('Another proxy connection was initiated, but one is still active')
+		if self.server_connected.is_set():
+			await self.logger.error('Another proxy connection was initiated, but one is still active')
 			return
-
+		
+		await self.logger.info('Got connection!')
 		self.ws = ws
+		asyncio.ensure_future(self.cmd_in(ws))
+		asyncio.ensure_future(self.cmd_out(ws))
+		self.server_connected.set()
+		
 		await self.ws.wait_closed()
 		await self.logger.info('Connection to server lost! Reconnect with your proxy again!')
 		self.ws = None
-		self.server_diconnected.set()
+		self.server_connected.clear()
+		
 
+	@mpexception
 	async def run(self):
 		while True:
-			self.logger.info('Waiting for incoming connection!')
+			await self.logger.info('Waiting for incoming connection!')
 			server = await websockets.serve(self.handle_server, self.listen_ip, self.listen_port, ssl=self.ssl_ctx)
 			await server.wait_closed()
+			await asyncio.sleep(self.reconnect_interval)
 			

@@ -38,7 +38,7 @@ class MultiplexorSocks5SocketProxy:
 			try:
 				data = await self.reader.read(4096)
 			except Exception as e:
-				await self.logger.info('reader exception! %s' % e)
+				await self.logger.error('reader exception! %s' % e)
 				#notifying reader/writer that socket is terminated
 				self.socket_terminated_evt.set()
 				#notifying remote end that socket is terminated
@@ -50,7 +50,7 @@ class MultiplexorSocks5SocketProxy:
 			else:
 				if not data:
 					#socket terminated...
-					await self.logger.info('Client terminated the connection!')
+					await self.logger.debug('Client terminated the connection!')
 					#notifying reader/writer that socket is terminated
 					self.socket_terminated_evt.set()
 					#notifying remote end that socket is terminated
@@ -82,7 +82,7 @@ class MultiplexorSocks5SocketProxy:
 				self.socket_terminated_evt.set()
 				
 			else:
-				await self.logger.info('Got unexpected command type: %s' % cmd.cmdtype)	
+				await self.logger.debug('Got unexpected command type: %s' % cmd.cmdtype)	
 	
 class Socks5Client:
 	"""
@@ -278,7 +278,7 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 				#socket communication happening
 				await self.dispatch_table[cmd.socket_id].remote_in.put(cmd)
 			else:
-				await self.logger.info('Unknown data in')
+				await self.logger.debug('Unknown data in')
 		
 		#print('handle_plugin_data_in exiting!')
 		
@@ -306,10 +306,17 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 			
 	async def setup(self):
 		self.plugin_info = Socks5PluginInfo()
+		listen_ip = '127.0.0.1'
+		listen_port = 0
+		
 		if self.plugin_params:
-			raise Exception('Not implemented!')
-		else:
-			self.server = await asyncio.start_server(self.handle_socks_client, '127.0.0.1', 0)
+			print(self.plugin_params)
+			if self.plugin_params['listen_ip'] and self.plugin_params['listen_ip'].upper() != 'NONE':
+				listen_ip = self.plugin_params['listen_ip']
+			if self.plugin_params['listen_port'] and self.plugin_params['listen_port'].upper() != 'NONE':
+				listen_port = int(self.plugin_params['listen_port'])
+			
+		self.server = await asyncio.start_server(self.handle_socks_client, listen_ip, listen_port)
 		
 		self.plugin_info.listen_ip, self.plugin_info.listen_port = self.server.sockets[0].getsockname()
 		await self.logger.info('SOCKS5 Server is now listening on %s:%s' % (self.plugin_info.listen_ip, self.plugin_info.listen_port))
