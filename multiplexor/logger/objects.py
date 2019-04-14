@@ -33,7 +33,7 @@ class LogEntry:
 	"""
 	Communications object that is used to pass log information to the LogProcessor
 	"""
-	def __init__(self, level, name, msg, connection = None):
+	def __init__(self, level, name, msg, agent_id = None):
 		"""
 
 		:param level: log level
@@ -46,13 +46,14 @@ class LogEntry:
 		self.level = level
 		self.name  = name
 		self.msg   = msg
-		self.connection = connection
+		self.agent_id = agent_id
 
 	def to_dict(self):
 		t = {}
 		t['level'] = self.level
 		t['name'] = self.name
 		t['msg'] = self.msg
+		t['agent_id'] = self.agent_id
 		return t
 
 	def to_json(self):

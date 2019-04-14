@@ -9,12 +9,12 @@ from multiplexor.plugins.plugins import *
 from multiplexor.plugins import *
 
 class MultiplexorServer:
-	def __init__(self, logQ):
+	def __init__(self, logger):
 		self.transports = []
-		self.ophandlers = []
+		self.ophandlers = {}
 		self.agents = {}
 		self.operators = {}
-		self.logger = Logger('MultiplexorServer', logQ = logQ)
+		self.logger = logger
 		self.shutdown_evt = asyncio.Event()
 		self.agent_dispatch_queue = asyncio.Queue()
 		self.operator_dispatch_queue = asyncio.Queue()
@@ -102,19 +102,30 @@ class MultiplexorServer:
 				
 			else:
 				await self.logger.debug('Not implemented operator command!')
+
+		self.remove_operator(self, operator)
+
+	async def remove_operator(self, operator):
+		del self.operators[operator.operator_id]
+		self.logger.del_consumer(operator)
 	
 	async def handle_new_operator_event(self, ophandler):
 		while not self.shutdown_evt.is_set() or not ophandler.trasnport_terminated_evt.is_set():
 			operator = await ophandler.operator_dispatch_queue.get()
-			self.operators[str(uuid.uuid4())] = operator
+			self.operators[operator.operator_id] = operator
+			self.logger.add_consumer(operator)
 			await self.logger.debug('New operator in!')
 			asyncio.ensure_future(self.handle_operator_in(operator))
 			
+	def remove_ophandler(self, ophandler):
+		if ophandler in self.ophandlers:
+			del self.ophandlers[ophandler]
+		return
 	
 	def add_ophandler(self, ophandler):
 		print('adding ophandler')
 		ophandler.operator_dispatch_queue = self.operator_dispatch_queue
-		self.ophandlers.append(ophandler)
+		self.ophandlers[ophandler] = 0
 		asyncio.ensure_future(self.handle_new_operator_event(ophandler))
 		asyncio.ensure_future(ophandler.run())
 		
@@ -224,10 +235,6 @@ class MultiplexorServer:
 				print('Dispatching plugin data!')
 				await agent.plugins[cmd.plugin_id].plugin_in.put(cmd.plugin_data)
 				
-			elif cmd.cmdtype == ServerCMDType.AGENT_LOG:
-				#TODO
-				await self.logQ.put(None)
-				
 			#elif cmd.cmdtype == ServerCMDType.PLUGIN_START:
 			#	#TODO
 			#	await self.logQ.put(None)
@@ -262,6 +269,12 @@ class MultiplexorServer:
 					await self.operators[k].multiplexor_cmd_out.put(rply)
 					
 				await self.logger.info('Plugin started')
+
+			elif cmd.cmdtype == ServerCMDType.AGENT_LOG:
+				src_name = "AGENT PLUGIN %s" % cmd.plugin_id if cmd.plugin_id else "CORE"
+				log = LogEntry(cmd.severity, src_name, cmd.msg, agent_id = agent.agent_id)
+				await self.logger.logQ.put(log)
+
 				
 		#at this point the agent either lost connection or the server is being stopped
 		del self.agents[agent.agent_id]
@@ -287,6 +300,7 @@ class MultiplexorServer:
 	
 	@mpexception
 	async def run(self):
+		asyncio.ensure_future(self.logger.run())
 		while not self.shutdown_evt.is_set():
 			agent = await self.agent_dispatch_queue.get()
 			asyncio.ensure_future(self.handle_agent(agent))

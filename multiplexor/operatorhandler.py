@@ -1,17 +1,32 @@
 import websockets
 import asyncio
 import uuid
+import json
 
 from multiplexor.operator.protocol import *
 from multiplexor.logger.logger import *
 
 class Operator:
-	def __init__(self, websocket, operator_id):
+	def __init__(self, websocket, operator_id, logQ):
+		self.logger = Logger('Operator %s' % operator_id, logQ=logQ)
 		self.websocket = websocket
 		self.operator_id = operator_id
 		self.multiplexor_cmd_in = asyncio.Queue()
 		self.multiplexor_cmd_out = asyncio.Queue()
 		self.transport_closed = asyncio.Event()
+
+	async def process_log(self, logmsg):
+		if not self.transport_closed.is_set():
+			try:
+				t = OperatorLogEvent()
+				t.level = logmsg.level
+				t.name = logmsg.name
+				t.msg = logmsg.msg
+				t.agent_id = logmsg.agent_id
+
+				await self.websocket.send(json.dumps(t.to_dict()))
+			except Exception as e:
+				await self.logger.error(e)
 
 class OperatorHandler:
 	def __init__(self, listen_ip, listen_port, logQ, sslctx = None):
@@ -32,7 +47,6 @@ class OperatorHandler:
 			except websockets.exceptions.ConnectionClosed:
 				operator.transport_closed.set()
 				return
-			print(data)
 			cmd = OperatorCmdParser.from_json(data)
 			await operator.multiplexor_cmd_in.put(cmd)
 	
@@ -49,7 +63,7 @@ class OperatorHandler:
 	async def handle_operator(self, websocket, path):
 		await self.logger.debug('Operator connected!')
 		
-		operator = Operator(websocket, str(uuid.uuid4()))
+		operator = Operator(websocket, str(uuid.uuid4()), self.logger.logQ)
 		asyncio.ensure_future(self.handle_incoming_cmds(operator))
 		asyncio.ensure_future(self.handle_outgoing_cmds(operator))
 		await self.operator_dispatch_queue.put(operator)

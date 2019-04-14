@@ -12,12 +12,11 @@ if __name__ == '__main__':
 	operator_listen_port = 9999	
 	
 	logger = Logger('Logger')
-	asyncio.ensure_future(logger.run())
 
 	op = OperatorHandler(operator_listen_ip, operator_listen_port, logger.logQ)
 	transport = WebsocketsTransportServer(listen_ip, listen_port, logger.logQ)
 	
-	s = MultiplexorServer(logger.logQ)
+	s = MultiplexorServer(logger)
 	s.add_transport(transport)
 	s.add_ophandler(op)
 	
