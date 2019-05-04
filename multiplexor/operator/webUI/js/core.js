@@ -17,6 +17,7 @@ relaySocket.onclose = function(event) {
   relayScoketState = "closed";
 };
 relaySocket.onmessage = function(event) {
+  console.log("[RELAY] " + event.data);
   serverSocket.send(event.data);
 };
 
@@ -85,29 +86,28 @@ serverSocket.onmessage = function(event) {
 
 function addAgents(rply) {
   console.log("addAgents invoked");
-
 };
 
 function addAgent(agent_data){
-
+   console.log("addAgent invoked");
 };
 
 function addAgentInfo(rply){
-
+   console.log("addAgentInfo invoked");
 };
 
 function addPlugins(rply){
-
+  console.log("addPlugins invoked");
 };
 
 function addPlugin(plugin_data){
-
+  console.log("addPlugin invoked");
 };
 
 function removePlugin(plugin_data){
-
+  console.log("removePlugin invoked");
 };
 
 function addPluginInfo(rply){
-
+  console.log("addPluginInfo invoked");
 };

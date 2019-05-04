@@ -45,7 +45,7 @@ class SSPIAuth:
 	async def run(self):
 		self.ws = await websockets.connect(self.server_url)
 		
-		
+		"""
 		spn_principal = 'srv_http@TEST'
 		ac = SSPIKerberosAuthCmd()
 		ac.client_name = None
@@ -83,7 +83,7 @@ class SSPIAuth:
 		status, challenge, creds = ntlm_handler.do_AUTH(base64.b64decode(rply.authdata))
 		for cred in creds:
 			print(str(cred.to_credential()))
-		"""
+		
 		
 		
 	

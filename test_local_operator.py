@@ -79,7 +79,7 @@ async def main(args):
 			
 		elif args.type == 'sspi':
 			if args.remote == False:
-				#cmd = OperatorStartPlugin()
+				cmd = OperatorStartPlugin()
 				cmd.agent_id = args.agentid
 				cmd.plugin_type = PluginType.SSPI.value
 				cmd.server = Socks5PluginServerStartupSettings(listen_ip = args.listen_ip, listen_port = args.listen_port, auth_type = None, remote = False)
