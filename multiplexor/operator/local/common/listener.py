@@ -24,7 +24,7 @@ class MultiplexorOperatorListener:
 	@mpexception
 	async def cmd_in(self, ws):
 		while ws.open:
-			data = await self.ws.recv()
+			data = await ws.recv()
 			rply = OperatorCmdParser.from_json(data)
 			await self.cmd_in_q.put(rply)
 
@@ -32,7 +32,7 @@ class MultiplexorOperatorListener:
 	async def cmd_out(self, ws):
 		while ws.open:
 			cmd = await self.cmd_out_q.get()
-			await self.ws.send(json.dumps(cmd.to_dict()))
+			await ws.send(json.dumps(cmd.to_dict()))
 
 	@mpexception
 	async def handle_server(self, ws, path):
@@ -44,14 +44,12 @@ class MultiplexorOperatorListener:
 			return
 		
 		await self.logger.info('Got connection!')
-		self.ws = ws
 		asyncio.ensure_future(self.cmd_in(ws))
 		asyncio.ensure_future(self.cmd_out(ws))
 		self.server_connected.set()
 		
-		await self.ws.wait_closed()
+		await ws.wait_closed()
 		await self.logger.info('Connection to server lost! Reconnect with your proxy again!')
-		self.ws = None
 		self.server_connected.clear()
 		
 
