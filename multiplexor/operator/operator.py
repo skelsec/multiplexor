@@ -1,155 +1,289 @@
-
 import asyncio
-import websockets
 
-from .protocol import *
+from multiplexor.operator.local.common.connector import MultiplexorOperatorConnector
+from multiplexor.operator.local.common.listener import MultiplexorOperatorListener
+from multiplexor.operator.local.socks5 import MultiplexorSocks5Operator, Socks5PluginServerStartupSettings
+from multiplexor.operator.local.sspi import MultiplexorSSPIOperator
 
-agent_id = ''
-plugin_id = ''
+from multiplexor.plugins.plugintypes import PluginType
+from multiplexor.operator.protocol import OperatorGetAgentInfoCmd, OperatorListAgentsCmd, OperatorStartPlugin, OperatorGetPluginInfoCmd, OperatorListPluginsCmd, OperatorCmdType
+from multiplexor.logger.logger import mpexception, Logger
+from multiplexor.operator.exceptions import MultiplexorRemoteException
 
-class Operator:
-	def __init__(self):
-		self.server_url = None
-		self.ws = None
-		
-		self.server_cmd_q = asyncio.Queue()
-		
-		self.agents = {}
-		
-	async def handle_server_in(self):
-		global agent_id
-		global plugin_id
-		
+class MultiplexorOperator:
+	"""
+	This object represents an operator, who controls the multiplexor server.
+	It can manage all aspects of the server, list agents, plugins etc and create plugins on the agent
+
+	Use this for managing the server, either via command line or programaticcally using the APIs this object exposes.
+	"""
+	def __init__(self, connection_string, logger = None):
+		self.connection_string = connection_string
+		self.connector = None
+		self.logger = logger
+		self.cmd_id_ctr = 0
+		self.reply_buffer = {} # cmd_id -> reply
+		self.reply_buffer_evt = {} #cmd_id -> event
+		self.plugin_created_evt = {} #agent_id -> {plugin_id -> started_event}
+
+		self.connector_task = None
+		self.incoming_task = None
+
+	@mpexception
+	async def handle_incoming(self):
 		while True:
-			data = await self.ws.recv()
-			print('RPLY in!')
-			rply = OperatorCmdParser.from_json(data)
-			print(rply.to_dict())
-			if rply.cmdtype == OperatorCmdType.LIST_AGENTS_RPLY:
-				for agent in rply.agents:
-					self.agents[agent] = 1
-					
-					cmd = OperatorGetAgentInfoCmd()
-					cmd.agent_id = agent
-					await self.server_cmd_q.put(cmd)
-			
-			elif rply.cmdtype == OperatorCmdType.GET_AGENT_INFO_RPLY:
-				if rply.agent_id not in self.agents:
-					self.agents[rply.agent_id] = 1
-				self.agents[rply.agent_id] = rply.agentinfo
-				
-				cmd = OperatorStartPlugin()
-				cmd.cmdtype = OperatorCmdType.START_PLUGIN
-				cmd.agent_id = rply.agent_id
-				cmd.plugin_type = 0
-				cmd.plugin_data = None
-				await self.server_cmd_q.put(cmd)
-				
-			elif rply.cmdtype == OperatorCmdType.PLUGIN_STARTED:
-				#just 3 testing making this global
-				agent_id = rply.agent_id
-				plugin_id = rply.plugin_id
-				
-				cmd = OperatorGetPluginInfoCmd()
-				cmd.agent_id = rply.agent_id
-				cmd.plugin_id = rply.plugin_id
-				await self.server_cmd_q.put(cmd)
-			
-			elif rply.cmdtype == OperatorCmdType.GET_PLUGIN_INFO_RPLY:	
-				print(rply.plugininfo)
-				
-	async def handle_server_in_sspi(self):
-		global agent_id
-		global plugin_id
-		
-		while True:
-			data = await self.ws.recv()
-			print('RPLY in!')
-			rply = OperatorCmdParser.from_json(data)
-			print(rply.to_dict())
-			if rply.cmdtype == OperatorCmdType.LIST_AGENTS_RPLY:
-				for agent in rply.agents:
-					self.agents[agent] = 1
-					
-					cmd = OperatorGetAgentInfoCmd()
-					cmd.agent_id = agent
-					await self.server_cmd_q.put(cmd)
-			
-			elif rply.cmdtype == OperatorCmdType.GET_AGENT_INFO_RPLY:
-				if rply.agent_id not in self.agents:
-					self.agents[rply.agent_id] = 1
-				self.agents[rply.agent_id] = rply.agentinfo
-				
-				cmd = OperatorStartPlugin()
-				cmd.cmdtype = OperatorCmdType.START_PLUGIN
-				cmd.agent_id = rply.agent_id
-				cmd.plugin_type = 1
-				cmd.plugin_data = None
-				await self.server_cmd_q.put(cmd)
-				
-			elif rply.cmdtype == OperatorCmdType.PLUGIN_STARTED:
-				#just 3 testing making this global
-				agent_id = rply.agent_id
-				plugin_id = rply.plugin_id
-				
-				cmd = OperatorGetPluginInfoCmd()
-				cmd.agent_id = rply.agent_id
-				cmd.plugin_id = rply.plugin_id
-				await self.server_cmd_q.put(cmd)
-			
-			elif rply.cmdtype == OperatorCmdType.GET_PLUGIN_INFO_RPLY:	
-				print(rply.plugininfo)
-		
-	async def handle_server_out(self):
-		while True:
-			cmd = await self.server_cmd_q.get()
-			
-			await self.ws.send(json.dumps(cmd.to_dict()))
-			print('CMD sent!')
-		
+			try:
+				reply = await self.connector.cmd_in_q.get()
+				print(reply.to_dict())
+				if reply.cmdtype in [OperatorCmdType.START_PLUGIN, OperatorCmdType.PLUGIN_STARTED, OperatorCmdType.PLUGIN_STOPPED, OperatorCmdType.LOG_EVT, OperatorCmdType.PLUGIN_DATA_EVT]:
+					if reply.cmdtype == OperatorCmdType.LOG_EVT:
+						await self.logger.log(reply.level, reply.msg)
+					elif reply.cmdtype == OperatorCmdType.PLUGIN_STARTED:
+						self.plugin_created_evt[reply.agent_id][reply.plugin_id].set()
+					continue
+				else:
+					self.reply_buffer[reply.cmd_id] = reply
+					self.reply_buffer_evt[reply.cmd_id].set()
+			except Exception as e:
+				#at this point something bad happened, so we are cleaning up
+				#sending out the exception to all cmd ids and notifying them
+				for reply_id in self.reply_buffer:
+					self.reply_buffer[reply_id] = e
+				for reply_id in self.reply_buffer_evt:
+					self.reply_buffer_evt[reply_id].set()
+				break
+
+	@mpexception		
+	async def recv_reply(self, cmd_id):
+		#
+		# Checking if cmd id is already in the buffer, if not we wait for the incoming event
+		# then we take out the reply from the buffer, and delete the buffer entry and also the notification entry
+		#
+		print('recv_reply called with cmd_id of %s' % cmd_id)
+		if cmd_id not in self.reply_buffer:
+			await self.reply_buffer_evt[cmd_id].wait()
+		reply = self.reply_buffer[cmd_id]
+		del self.reply_buffer[cmd_id]
+		del self.reply_buffer_evt[cmd_id]
+		return reply
+
+	@mpexception
+	async def send_cmd(self, cmd):
+		## assigns a command id to the command then sends the command
+		## returns the command id to the caller, which then can wait for the reply
+		##
+		cmd.cmd_id = self.cmd_id_ctr
+		self.reply_buffer_evt[cmd.cmd_id] = asyncio.Event()
+		self.cmd_id_ctr += 1
+		await self.connector.cmd_out_q.put(cmd)
+		print('send_cmd called and reaturned %s' % cmd.cmd_id)
+		return cmd.cmd_id
+
+	@mpexception
 	async def connect(self):
-		print('Connecting!')
-		while True:
-			self.ws = await websockets.connect(self.server_url)
-			asyncio.ensure_future(self.handle_server_in_sspi())
-			asyncio.ensure_future(self.handle_server_out())
-			
-			await self.ws.wait_closed()
-			asyncio.sleep(10)
-			print('Reconnecting!')
-		
+		if self.logger is None:
+			self.logger = Logger('Operator')
+			asyncio.ensure_future(self.logger.run())
 
-	async def send_test_sspi(self):
-		self.server_url = 'ws://127.0.0.1:9999'
-		asyncio.ensure_future(self.connect())
-		#await asyncio.sleep(3)
-		print('Sending command')
+		self.connector = MultiplexorOperatorConnector(self.connection_string, self.logger.logQ, ssl_ctx = None, reconnect_interval = 5)
+		self.connector_task = asyncio.create_task(self.connector.run())
+		await asyncio.wait_for(self.connector.server_connected.wait(), timeout = 5) #waiting until connector managed to connect to the multiplexor server
+		self.incoming_task = asyncio.create_task(self.handle_incoming())
+
+	@mpexception
+	async def listen(self):
+		if self.logger is None:
+			self.logger = Logger('Operator')
+			asyncio.ensure_future(self.logger.run())
+
+		if self.connection_string.find(':') != -1:
+			listen_ip, listen_port = self.connection_string.split(':')
+		else:
+			listen_ip = '127.0.0.1'
+			listen_port = int(self.connection_string)
+		self.connector = MultiplexorOperatorListener(listen_ip, listen_port, self.logger.logQ, ssl_ctx = None, reconnect_interval = 5)
+		self.connector_task = asyncio.create_task(self.connector.run())
+		self.incoming_task = asyncio.create_task(self.handle_incoming())
+
+	async def terminate(self):
+		if self.incoming_task:
+			self.incoming_task.cancel()
+		if self.connector_task:
+			self.connector_task.cancel()
+		if self.connector:
+			await self.connector.terminate()
+		self.connector_task = None
+
+		self.connector = None
+		self.cmd_id_ctr = 0
+		self.reply_buffer = {} # cmd_id -> reply
+		self.reply_buffer_evt = {} #cmd_id -> event
+		return
+
+	@mpexception
+	async def list_agents(self):
 		cmd = OperatorListAgentsCmd()
-		await self.server_cmd_q.put(cmd)
-		while True:
-			await asyncio.sleep(10)
-			if agent_id != '':
-				cmd = OperatorGetPluginInfoCmd()
-				cmd.agent_id = agent_id
-				cmd.plugin_id = plugin_id
-				await self.server_cmd_q.put(cmd)
-			else:
-				print('no plugins started yet :(')
+		cmd_id = await self.send_cmd(cmd)
+		reply = await self.recv_reply(cmd_id)
+
+		return reply.agents
+
+	@mpexception
+	async def start_socks5(self, agent_id, listen_ip = '127.0.0.1', listen_port = 0, remote = False):
+		if remote == False:
+			if agent_id not in self.plugin_created_evt:
+				self.plugin_created_evt[agent_id] = {}
+			cmd = OperatorStartPlugin()
+			cmd.agent_id = agent_id
+			cmd.plugin_type = PluginType.SOCKS5.value
+			cmd.server = Socks5PluginServerStartupSettings(listen_ip = listen_ip, listen_port = listen_port, auth_type = None, remote = False)
+			cmd_id = await self.send_cmd(cmd)
+			reply = await self.recv_reply(cmd_id)
+
+			if reply.cmdtype == OperatorCmdType.EXCEPTION:
+				raise MultiplexorRemoteException(reply.exc_data)
+			self.plugin_created_evt[reply.agent_id][reply.plugin_id] = asyncio.Event()
+			await self.plugin_created_evt[reply.agent_id][reply.plugin_id].wait() #waiting for the plugin creation event
+			del self.plugin_created_evt[reply.agent_id][reply.plugin_id]
+
+			reply = await self.info_plugin(agent_id, reply.plugin_id)
+			print('aaaaaaa %s' % reply)
+			return reply
+			
+		else:
+			#this passes all controls over to the local sock5server object
+			#exits the function when socks5 server is terminated
+			so = MultiplexorSocks5Operator(self.logger.logQ, self.connector, agent_id)
+			await so.run()
+			return
+
+	@mpexception
+	async def start_sspi(self, agent_id, listen_ip = '127.0.0.1', listen_port = 0, remote = False):
+		if remote == False:
+			cmd = OperatorStartPlugin()
+			cmd.agent_id = agent_id
+			cmd.plugin_type = PluginType.SSPI.value
+			cmd.server = Socks5PluginServerStartupSettings(listen_ip = listen_ip, listen_port = listen_port, auth_type = None, remote = False)
+			cmd_id = await self.send_cmd(cmd)
+			reply = await self.recv_reply(cmd_id)
+			if reply.cmdtype == OperatorCmdType.EXCEPTION:
+				raise MultiplexorRemoteException(reply.exc_data)
+			reply = await self.info_plugin(agent_id, reply.plugin_id)
+			print('aaaaaaa %s' % reply.plugininfo)
+			return reply.plugininfo
+			
+		else:
+			#this passes all controls over to the local sock5server object
+			#exits the function when socks5 server is terminated
+			so = MultiplexorSSPIOperator(self.logger.logQ, self.connector, agent_id)
+			await so.run()
+			return
+
+	async def info_agent(self, agent_id):
+		cmd = OperatorGetAgentInfoCmd(agent_id = agent_id)
+		cmd_id = await self.send_cmd(cmd)
+		reply = await self.recv_reply(cmd_id)
+		if reply.cmdtype == OperatorCmdType.EXCEPTION:
+			raise MultiplexorRemoteException(reply.exc_data)
+		return reply.agentinfo
+
+	
+	async def list_agent_plugins(self, agent_id):
+		cmd = OperatorListPluginsCmd(agent_id = agent_id)
+		cmd_id = await self.send_cmd(cmd)
+		reply = await self.recv_reply(cmd_id)
+		if reply.cmdtype == OperatorCmdType.EXCEPTION:
+			raise MultiplexorRemoteException(reply.exc_data)
+		return reply.plugins
+
+	async def info_plugin(self, agent_id, plugin_id):
+		cmd = OperatorGetPluginInfoCmd(agent_id = agent_id, plugin_id = plugin_id)
+		cmd_id = await self.send_cmd(cmd)
+		reply = await self.recv_reply(cmd_id)
+		if reply.cmdtype == OperatorCmdType.EXCEPTION:
+			raise MultiplexorRemoteException(reply.exc_data)
+		return reply.plugininfo
+
+async def main_loop(args):
+	##setting up logging
+	logger = Logger('Operator')
+	asyncio.ensure_future(logger.run())
+
+	mgr = MultiplexorOperator(args.connection_string, logger)
+	await mgr.connect()
+		
+	## sending commands
+	if args.command == 'server':
+		if args.cmd == 'list':
+			reply = await mgr.list_agents()
+			print(reply)
+
+	elif args.command == 'agent':
+		if args.cmd == 'info':
+			reply = await mgr.info_agent(args.agentid)
+			print(reply)
+			
+		elif args.cmd == 'list':
+			reply = await mgr.list_agent_plugins(args.agentid)
+			print(reply)
+			
+	elif args.command == 'plugin':
+		if args.cmd == 'info':
+			reply = await mgr.info_plugin(args.agentid, args.pluginid)
+			print(reply)
+			
+			
+	elif args.command == 'create':
+		if args.type == 'socks5':
+			reply = await mgr.start_socks5(args.agentid, args.listen_ip, args.listen_port, args.remote)
+			print(reply)
+			
+			
+		elif args.type == 'sspi':
+			reply = await mgr.start_socks5(args.agentid, args.listen_ip, args.listen_port, args.remote)
+			print(reply)
+	
+	await mgr.terminate()
+
+def main():
+	import argparse
+	parser = argparse.ArgumentParser(description='Local operator for multiplexor')
+	parser.add_argument('-v', '--verbose', action='count', default=0, help='Increase verbosity, can be stacked')
+	parser.add_argument('-t', '--connection-type', choices=['listen', 'connect'], help='Defines the connection type to the multiplexor server')
+	parser.add_argument('-c', '--connection-string', help = 'Either <ip>:<port> or a websockets URL "ws://<ip>:<port>", depending on the connection type')
+	
+
+	subparsers = parser.add_subparsers(help = 'commands')
+	subparsers.required = True
+	subparsers.dest = 'command'
+	
+	server_group = subparsers.add_parser('server', help='Server related commands')
+	server_group.add_argument('cmd', choices=['list'], help='command')
+	
+	agent_group = subparsers.add_parser('agent', help='Server related commands')
+	agent_group.add_argument('agentid', help='agent ID')
+	agent_group.add_argument('cmd', choices=['list','info'], help='command')
+	
+	
+	plugin_group = subparsers.add_parser('plugin', help='Server related commands')
+	plugin_group.add_argument('agentid', help='agent ID')
+	plugin_group.add_argument('pluginid', help='plugin ID')
+	plugin_group.add_argument('cmd', choices=['info'], help='command')
+	
+	create_plugin_group = subparsers.add_parser('create', help='Starts a plugin on the agent')
+	create_plugin_group.add_argument('agentid', help='agent ID')
+	create_plugin_group.add_argument('type', choices=['socks5','sspi'], help='command')
+	create_plugin_group.add_argument('-r', '--remote', action='store_true', help='plugin server will be listening on the mutiplexor server')
+	create_plugin_group.add_argument('-l', '--listen-ip', help='IP to listen on')
+	create_plugin_group.add_argument('-p', '--listen-port', help='Port to listen on')
+	create_plugin_group.add_argument('-d', '--startup-data', help='Additional data in JSON form to be passed to the plugin startup routine')
+	
+	args = parser.parse_args()
+
+	asyncio.run(main_loop(args))
+
+if __name__ == '__main__':
+	main()
+	
 			
 	
-	async def send_test_data(self):
-		self.server_url = 'ws://127.0.0.1:9999'
-		asyncio.ensure_future(self.connect())
-		#await asyncio.sleep(3)
-		print('Sending command')
-		cmd = OperatorListAgentsCmd()
-		await self.server_cmd_q.put(cmd)
-		while True:
-			await asyncio.sleep(10)
-			if agent_id != '':
-				cmd = OperatorGetPluginInfoCmd()
-				cmd.agent_id = agent_id
-				cmd.plugin_id = plugin_id
-				await self.server_cmd_q.put(cmd)
-			else:
-				print('no plugins started yet :(')

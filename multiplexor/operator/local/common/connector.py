@@ -1,8 +1,9 @@
 import asyncio
 import websockets
+import json
 
-from multiplexor.operator.protocol import *
-from multiplexor.logger.logger import *
+from multiplexor.operator.protocol import OperatorCmdParser
+from multiplexor.logger.logger import mpexception, Logger
 
 
 
@@ -15,7 +16,10 @@ class MultiplexorOperatorConnector:
 
 		self.cmd_out_q = asyncio.Queue()
 		self.cmd_in_q = asyncio.Queue()
-		self.server_connected = asyncio.Event() #this variable is used to signel status towards the modules
+		self.server_connected = asyncio.Event() #this variable is used to signal status towards the modules
+		self.in_task = None
+		self.out_task = None
+		self.current_ws = None
 
 	@mpexception
 	async def cmd_in(self, ws):
@@ -30,18 +34,37 @@ class MultiplexorOperatorConnector:
 			rply = await self.cmd_out_q.get()
 			await ws.send(json.dumps(rply.to_dict()))
 
+	@mpexception
+	async def terminate(self):
+		self.in_task.cancel()
+		self.out_task.cancel()
+		await self.current_ws.close()
+
+		self.in_task = None
+		self.out_task = None
+		self.current_ws = None
+
 
 	async def run(self):
 		while True:
 			await self.logger.info('Connecting to server')
 			try:
 				ws = await websockets.connect(self.server_url)
-				asyncio.ensure_future(self.cmd_in(ws))
-				asyncio.ensure_future(self.cmd_out(ws))
+				self.current_ws = ws
+				self.in_task = asyncio.create_task(self.cmd_in(ws))
+				self.out_task = asyncio.create_task(self.cmd_out(ws))
+
 				self.server_connected.set()
 				await ws.wait_closed()
 				self.server_connected.clear()
-				
+				self.in_task.cancel()
+				self.out_task.cancel()
+				self.in_task = None
+				self.out_task = None
+				self.current_ws = None
+
+			except asyncio.CancelledError:
+				return
 			except Exception as e:
 				await self.logger.info('Error connecting to server! Reason: %s' % e)
 			else:

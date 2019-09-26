@@ -1,8 +1,9 @@
 import asyncio
 import websockets
+import json
 
-from multiplexor.operator.protocol import *
-from multiplexor.logger.logger import *
+from multiplexor.operator.protocol import OperatorCmdParser
+from multiplexor.logger.logger import mpexception, Logger
 
 
 class MultiplexorOperatorListener:
@@ -20,6 +21,8 @@ class MultiplexorOperatorListener:
 		self.cmd_out_q = asyncio.Queue()
 		self.cmd_in_q = asyncio.Queue()
 		self.server_connected = asyncio.Event() #this event is for other objects, do not remove!
+		self.in_task = None
+		self.out_task = None
 
 	@mpexception
 	async def cmd_in(self, ws):
@@ -44,13 +47,20 @@ class MultiplexorOperatorListener:
 			return
 		
 		await self.logger.info('Got connection!')
-		asyncio.ensure_future(self.cmd_in(ws))
-		asyncio.ensure_future(self.cmd_out(ws))
+		
+		
+		self.in_task = asyncio.create_task(self.cmd_in(ws))
+		self.out_task = asyncio.create_task(self.cmd_out(ws))
+
 		self.server_connected.set()
 		
 		await ws.wait_closed()
 		await self.logger.info('Connection to server lost! Reconnect with your proxy again!')
 		self.server_connected.clear()
+		self.in_task.cancel()
+		self.out_task.cancel()
+		self.in_task = None
+		self.out_task = None
 		
 
 	@mpexception

@@ -30,6 +30,13 @@ class SSPINTLMClient:
 		data = await self.transport.recv()
 		rply = SSPIPluginCMD.from_dict(json.loads(data))
 		self.data = rply.authdata
+
+	async def get_sessionkey(self):
+		ac = SSPIGetSessionKeyCmd()
+		await self.transport.send(json.dumps(ac.to_dict()))
+		data = await self.transport.recv()
+		rply = SSPIPluginCMD.from_dict(json.loads(data))
+		self.data = rply.session_key
 	
 
 if __name__ == '__main__':

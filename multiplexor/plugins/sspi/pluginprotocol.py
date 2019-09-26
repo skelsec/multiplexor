@@ -19,6 +19,9 @@ class SSPICmdType(enum.Enum):
 	EncryptMessage = 10
 	EncryptMessageRply = 11	
 	Winerror = 12
+	GET_SESSIONKEY = 13,
+	GET_SESSIONKEY_RPLY = 14
+        
 	
 def eon(x):
 	"""
@@ -57,7 +60,8 @@ class WinError:
 			'result' : self.result ,
 			'reason' : self.reason ,	
 		}
-		
+	
+	@staticmethod
 	def from_dict(d):
 		c = WinError()
 		c.result = d['result']
@@ -107,7 +111,8 @@ class SSPIKerberosAuthCmd:
 			'target_name' : self.target_name ,
 			'flags': self.flags ,
 		}
-		
+	
+	@staticmethod
 	def from_dict(d):
 		c = SSPIKerberosAuthCmd()
 		c.client_name = d['client_name']
@@ -158,7 +163,8 @@ class SSPIKerberosAuthRply:
 			'result' : self.result ,
 			'authdata' : self.authdata ,	
 		}
-		
+	
+	@staticmethod
 	def from_dict(d):
 		c = SSPIKerberosAuthRply()
 		c.result = d.get('result')
@@ -191,7 +197,8 @@ class SSPINTLMAuthCmd:
 			'target_name' : self.target_name ,	
 			'flags' : self.flags ,	
 		}
-		
+	
+	@staticmethod
 	def from_dict(d):
 		c = SSPINTLMAuthCmd()
 		c.client_name = d.get('client_name')
@@ -242,7 +249,8 @@ class SSPINTLMAuthRply:
 			'result' : self.result ,
 			'authdata' : self.authdata ,	
 		}
-		
+	
+	@staticmethod
 	def from_dict(d):
 		c = SSPINTLMAuthRply()
 		c.result = d['result']
@@ -282,7 +290,8 @@ class SSPINTLMChallengeCmd:
 			'flags' : self.flags ,
 			'target_name' : self.target_name ,
 		}
-		
+	
+	@staticmethod
 	def from_dict(d):
 		c = SSPINTLMChallengeCmd()
 		c.token = d['token']
@@ -321,7 +330,8 @@ class SSPINTLMChallengeRply:
 			'result' : self.result ,
 			'authdata' : self.authdata ,	
 		}
-		
+	
+	@staticmethod
 	def from_dict(d):
 		c = SSPINTLMChallengeRply()
 		c.result = d['result']
@@ -339,7 +349,7 @@ class SSPINTLMChallengeRply:
 		
 class SSPIInitializeSecurityContextCmd:
 	def __init__(self):
-		self.cmdtype = SSPICmdType.InitializeSecurityContext
+		self.cmdtype = SSPICmdType.SSPIInitializeSecurityContextCmd
 		self.session_id = None
 		self.creds = None
 		self.target = None
@@ -350,7 +360,7 @@ class SSPIInitializeSecurityContextCmd:
 	
 	@staticmethod
 	def from_cmd(cmd):
-		p = SSPIAcquireCredentialsHandleCmd()
+		p = SSPIInitializeSecurityContextCmd()
 		p.session_id = cmd.params[0]
 		p.creds = cmd.params[1]
 		p.target = cmd.params[2]
@@ -451,6 +461,53 @@ class SSPIDecryptMessageRply:
 		cmd.params.append(self.session_id)
 		cmd.params.append(self.data)
 		return cmd.to_bytes()
+
+class SSPIGetSessionKeyCmd:
+	def __init__(self):
+		self.cmdtype = SSPICmdType.GET_SESSIONKEY
+		self.session_id = None
+
+	def to_dict(self):
+		return {
+			'cmdtype' : self.cmdtype.value,
+		}
+	
+	@staticmethod
+	def from_dict(d):
+		c = SSPIGetSessionKeyCmd()
+		return c
+		
+	def to_bytes(self):
+		cmd = SSPIPluginCMD()
+		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.session_id)
+		return cmd.to_bytes()
+		
+	@staticmethod
+	def from_cmd(cmd):
+		p = SSPIGetSessionKeyCmd()
+		p.session_id = cmd.params[0]
+		return p
+
+class SSPIGetSessionKeyRply:
+	def __init__(self):
+		self.cmdtype = SSPICmdType.GET_SESSIONKEY_RPLY
+		self.session_id = None
+		self.session_key = None
+
+	@staticmethod
+	def from_cmd(cmd):
+		p = SSPIGetSessionKeyRply()
+		p.session_id = cmd.params[0]
+		p.session_key = cmd.params[1]
+		return p
+		
+	def to_bytes(self):
+		cmd = SSPIPluginCMD()
+		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.session_id)
+		cmd.params.append(self.session_key)
+		return cmd.to_bytes()
 	
 class SSPIPluginCMD:
 	def __init__(self):
@@ -476,7 +533,7 @@ class SSPIPluginCMD:
 		cmd = SSPIPluginCMD()
 		cmd.cmdtype = SSPICmdType(buff.read(1)[0])
 		param_len = buff.read(1)[0]
-		for i in range(param_len):
+		for _ in range(param_len):
 			plen = int.from_bytes(buff.read(4), 'big', signed = False)
 			if plen == 0:
 				cmd.params.append(None)
@@ -525,6 +582,8 @@ type2obj = {
 	SSPICmdType.DecryptMessageRply : None,
 	SSPICmdType.EncryptMessage : None,
 	SSPICmdType.EncryptMessageRply : None,	
-	SSPICmdType.Winerror : WinError
+	SSPICmdType.Winerror : WinError,
+	SSPICmdType.GET_SESSIONKEY : SSPIGetSessionKeyCmd,
+	SSPICmdType.GET_SESSIONKEY_RPLY : SSPIGetSessionKeyRply,
 	
 }

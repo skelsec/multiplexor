@@ -1,9 +1,9 @@
 import asyncio
 import websockets
 import uuid
-from multiplexor.packetizer import Packetizer
-from multiplexor.agenthandler import MultiplexorAgentHandler
-from multiplexor.logger.logger import *
+from multiplexor.server.packetizer import Packetizer
+from multiplexor.server.agent import MultiplexorAgent
+from multiplexor.logger.logger import mpexception, Logger
 
 class WebsocketsTransportServer:
 	def __init__(self, listen_ip, listen_port, logging_queue, ssl_ctx = None):
@@ -18,12 +18,12 @@ class WebsocketsTransportServer:
 		"""
 		Gets raw bytes from the packetizer and tsends it to the agent
 		"""
-		while not agent.trasnport_terminated_evt.is_set():
+		while not agent.transport_terminated_evt.is_set():
 			data = await agent.packetizer.packetizer_out.get()
 			try:
 				await agent.transport.send(data)
 			except websockets.exceptions.ConnectionClosed:
-				agent.trasnport_terminated_evt.set()
+				agent.transport_terminated_evt.set()
 				return
 				
 	@mpexception	
@@ -31,11 +31,11 @@ class WebsocketsTransportServer:
 		"""
 		Dispatches the data recieved from the agent to the packetizer
 		"""
-		while not agent.trasnport_terminated_evt.is_set():
+		while not agent.transport_terminated_evt.is_set():
 			try:
 				data = await agent.transport.recv()
 			except websockets.exceptions.ConnectionClosed:
-				agent.trasnport_terminated_evt.set()
+				agent.transport_terminated_evt.set()
 				return
 			await agent.packetizer.packetizer_in.put(data)
 	
@@ -47,18 +47,19 @@ class WebsocketsTransportServer:
 		"""
 		remote_ip, remote_port = websocket.remote_address
 		await self.logger.info('Agent connected from %s:%s' % (remote_ip, remote_port))
-		agent = MultiplexorAgentHandler(self.logger.logQ)
+		agent = MultiplexorAgent(self.logger.logQ)
 		agent.transport = websocket
-		agent.packetizer = Packetizer(self.logger.logQ, agent.trasnport_terminated_evt)
+		agent.packetizer = Packetizer(self.logger.logQ, agent.transport_terminated_evt)
 		
 		asyncio.ensure_future(agent.packetizer.run())
 		asyncio.ensure_future(self.handle_packetizer_send(agent))
 		asyncio.ensure_future(self.handle_packetizer_recv(agent))
-		await self.agent_dispatch_queue.put(agent)
+		await self.agent_dispatch_queue.put((agent, 'CONNECTED'))
 		
 		await agent.transport.wait_closed()
-		agent.trasnport_terminated_evt.set()
+		agent.transport_terminated_evt.set()
 		await self.logger.info('Agent disconnected! %s:%s' % (remote_ip, remote_port))
+		await self.agent_dispatch_queue.put((agent, 'DISCONNECTED'))
 		
 	@mpexception
 	async def run(self):

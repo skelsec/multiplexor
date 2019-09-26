@@ -37,7 +37,8 @@ class Logger:
 				await self.handle_logger(logmsg)
 				if len(self.consumers) > 0:
 					await self.handle_consumers(logmsg)
-		
+		except asyncio.CancelledError:
+			return
 		except Exception as e:
 			print('Logger run exception! %s' % e)
 			
@@ -71,6 +72,7 @@ class Logger:
 		await self.logQ.put(LogEntry(logging.ERROR, self.name, msg))
 			
 	async def error(self, msg):
+		traceback.print_stack()
 		await self.logQ.put(LogEntry(logging.ERROR, self.name, msg))
 		
 	async def warning(self, msg):
@@ -101,7 +103,9 @@ def mpexception(funct):
 		try:
 			t = await funct(*args, **kwargs)
 			return t
-		except Exception as e:
+		except asyncio.CancelledError:
+			return
+		except:
 			await this.logger.exception(funct.__name__)
 			return
 			

@@ -1,30 +1,37 @@
 import asyncio
 import enum
 
-from multiplexor.logger.logger import *
-from multiplexor.protocol.server import *
+from multiplexor.logger.logger import mpexception, Logger
+from multiplexor.server.protocol import MultiplexorPluginData
 		
 class AgentStatus(enum.Enum):
-	CONNECTED = 0,
-	REGISTERING = 1,
-	REGISTERED = 2,
-	TERMINATING = 3,
+	CONNECTED = 0
+	REGISTERING = 1
+	REGISTERED = 2
+	TERMINATING = 3
 	TERMINATED = 4
 	
-class MultiplexorAgentHandler:
+class MultiplexorAgent:
 	def __init__(self, logQ):
-		self.logger = Logger('MultiplexorAgentHandler', logQ)
+		self.logger = Logger('MultiplexorAgent', logQ)
 		self.agent_id = None
 		self.transport = None
-		self.trasnport_terminated_evt = asyncio.Event()
+		self.transport_terminated_evt = asyncio.Event()
 		self.packetizer = None
 		
 		self.plugin_ctr = 0
 		self.plugins = {}
+		self.plugin_taks = {}
 		
 		self.status = AgentStatus.CONNECTED
 		
 		self.info = None
+
+	@mpexception
+	async def terminate(self):
+		for plugin_id in self.plugin_taks:
+			self.plugin_taks[plugin_id].cancel()
+		
 		
 	@mpexception
 	async def handle_plugin_out(self, plugin):
@@ -33,7 +40,7 @@ class MultiplexorAgentHandler:
 		All it does is to wrap the plugin's outgoing bytes to a server command 
 		then dispatches it to the agent's packetizer
 		"""
-		while not self.trasnport_terminated_evt.is_set() or not plugin.stop_plugin_evt.is_set():
+		while not self.transport_terminated_evt.is_set() or not plugin.stop_plugin_evt.is_set():
 			data = await plugin.plugin_out.get() #bytes!
 			
 			cmd = MultiplexorPluginData()
@@ -48,5 +55,5 @@ class MultiplexorAgentHandler:
 		plugin_id = str(self.plugin_ctr)
 		self.plugin_ctr += 1
 		self.plugins[plugin_id] = plugin_obj(plugin_id, self.logger.logQ, cmd.plugin_type, cmd.server)
-		asyncio.ensure_future(self.handle_plugin_out(self.plugins[plugin_id]))
+		self.plugin_taks[plugin_id] = asyncio.create_task(self.handle_plugin_out(self.plugins[plugin_id]))
 		return plugin_id

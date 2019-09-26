@@ -3,8 +3,8 @@ import uuid
 import asyncio
 from multiplexor.operator.protocol import *
 from multiplexor.logger.logger import *
-from multiplexor.agenthandler import *
-from multiplexor.protocol.server import *
+from multiplexor.server.agent import *
+from multiplexor.server.protocol import *
 from multiplexor.plugins.plugins import *
 from multiplexor.plugins import *
 
@@ -13,11 +13,13 @@ class MultiplexorServer:
 		self.transports = []
 		self.ophandlers = {}
 		self.agents = {}
+		self.agent_tasks = {} #agent -> handle_agent_task
 		self.operators = {}
 		self.logger = logger
 		self.shutdown_evt = asyncio.Event()
 		self.agent_dispatch_queue = asyncio.Queue()
 		self.operator_dispatch_queue = asyncio.Queue()
+		self.operator_incoming_task = {}
 		
 		self.multiplexor_event_q = asyncio.Queue() #this queue is used to dispatch event messages to all operators connected
 		                                          #such event are: logs, plugin created, agent connected, plugin terminated, agent disconnected
@@ -37,7 +39,7 @@ class MultiplexorServer:
 	##################################################################################################
 	@mpexception
 	async def handle_operator_in(self, operator):
-		while not self.shutdown_evt.is_set() or not operator.transport_closed.is_set():
+		while operator.websocket.open:
 			op_cmd = await operator.multiplexor_cmd_in.get()
 			if not op_cmd:
 				print('queue broken!')
@@ -45,6 +47,7 @@ class MultiplexorServer:
 			await self.logger.debug('Operator sent this: %s' % op_cmd)
 			if op_cmd.cmdtype == OperatorCmdType.LIST_AGENTS:
 				rply = OperatorListAgentsRply()
+				rply.cmd_id = op_cmd.cmd_id
 				for k in self.agents:
 					rply.agents.append(k)
 				
@@ -56,8 +59,12 @@ class MultiplexorServer:
 					agent = self.agents[op_cmd.agent_id]
 				except Exception as e:
 					await self.logger.debug('Operator tried to slect and unknown agent %s' % op_cmd.agent_id)
+					rply = OperatorExceptionEvt(op_cmd.cmd_id , 'Unknown agent!')
+					await operator.multiplexor_cmd_out.put(rply)
+
 				else:
 					rply = OperatorGetAgentInfoRply()
+					rply.cmd_id = op_cmd.cmd_id
 					rply.agent_id = op_cmd.agent_id
 					rply.agentinfo = self.agents[op_cmd.agent_id].info
 					await operator.multiplexor_cmd_out.put(rply)
@@ -67,8 +74,11 @@ class MultiplexorServer:
 					agent = self.agents[op_cmd.agent_id]
 				except Exception as e:
 					await self.logger.debug('Operator tried to slect and unknown agent %s' % op_cmd.agent_id)
+					rply = OperatorExceptionEvt(op_cmd.cmd_id , 'Unknown agent!')
+					await operator.multiplexor_cmd_out.put(rply)
 				else:
 					rply = OperatorListPluginsRply()
+					rply.cmd_id = op_cmd.cmd_id
 					rply.agent_id = op_cmd.agent_id
 					for k in agent.plugins:
 						rply.plugins.append(k)
@@ -77,12 +87,21 @@ class MultiplexorServer:
 			elif op_cmd.cmdtype == OperatorCmdType.GET_PLUGIN_INFO:
 				try:
 					agent = self.agents[op_cmd.agent_id]
-					plugin = agent.plugins[op_cmd.plugin_id]
-					
 				except Exception as e:
-					await self.logger.debug('Operator tried to select and unknown agent %s and/or unknown pugin id %s' % (op_cmd.agent_id, op_cmd.plugin_id))
+					await self.logger.debug('Operator tried to select and unknown agent %s ' % (op_cmd.agent_id))
+					rply = OperatorExceptionEvt(op_cmd.cmd_id , 'Unknown agent!')
+					await operator.multiplexor_cmd_out.put(rply)
+				
+				try:
+					plugin = agent.plugins[op_cmd.plugin_id]
+				except Exception as e:
+					await self.logger.debug('Operator tried to select an unknown pugin id %s' % (op_cmd.plugin_id))
+					rply = OperatorExceptionEvt(op_cmd.cmd_id , 'Unknown plugin!')
+					await operator.multiplexor_cmd_out.put(rply)
+				
 				else:
 					rply = OperatorGetPluginInfoRply()
+					rply.cmd_id = op_cmd.cmd_id
 					rply.agent_id = op_cmd.agent_id
 					rply.plugin_id = op_cmd.plugin_id
 					rply.plugininfo = plugin.plugin_info.to_dict() #all plugin info objects must have a to_dist fucntion!
@@ -93,12 +112,23 @@ class MultiplexorServer:
 					agent = self.agents[op_cmd.agent_id]					
 				except Exception as e:
 					await self.logger.debug('Operator tried to slect and unknown agent %s' % op_cmd.agent_id)
+					rply = OperatorExceptionEvt(op_cmd.cmd_id , 'Unknown agent!')
+					await operator.multiplexor_cmd_out.put(rply)
+
 				else:
 					try:
-						await self.start_plugin(operator, agent, op_cmd)
+						plugin_id = await self.start_plugin(operator, agent, op_cmd)
 					except Exception as e:
-						print(e)
+						await self.logger.debug('Failed to start plugin! Reason: %s' % e)
+						rply = OperatorExceptionEvt(op_cmd.cmd_id , 'Failed to start plugin! Reason: %s' % e)
+						await operator.multiplexor_cmd_out.put(rply)
 						return
+					else:
+						rply = OperatorStartPluginRply()
+						rply.cmd_id = op_cmd.cmd_id
+						rply.agent_id = op_cmd.agent_id
+						rply.plugin_id = plugin_id
+						await operator.multiplexor_cmd_out.put(rply)
 						
 			elif op_cmd.cmdtype == OperatorCmdType.PLUGIN_DATA_EVT:
 				try:
@@ -111,20 +141,22 @@ class MultiplexorServer:
 				
 			else:
 				await self.logger.debug('Not implemented operator command!')
-
-		self.remove_operator(self, operator)
-
-	async def remove_operator(self, operator):
-		del self.operators[operator.operator_id]
-		self.logger.del_consumer(operator)
 	
-	async def handle_new_operator_event(self, ophandler):
-		while not self.shutdown_evt.is_set() or not ophandler.trasnport_terminated_evt.is_set():
-			operator = await ophandler.operator_dispatch_queue.get()
-			self.operators[operator.operator_id] = operator
-			self.logger.add_consumer(operator)
-			await self.logger.debug('New operator in!')
-			asyncio.ensure_future(self.handle_operator_in(operator))
+	async def handle_operator_event(self, ophandler):
+		while not self.shutdown_evt.is_set() or not ophandler.transport_terminated_evt.is_set():
+			operator, status = await ophandler.operator_dispatch_queue.get()
+			if status == 'CONNECTED':
+				self.operators[operator.operator_id] = operator
+				self.logger.add_consumer(operator)
+				await self.logger.debug('New operator in!')
+				self.operator_incoming_task[operator.operator_id] = asyncio.create_task(self.handle_operator_in(operator))
+			else:
+				self.operator_incoming_task[operator.operator_id].cancel()
+				await self.operators[operator.operator_id].terminate()
+				self.logger.del_consumer(operator)
+				del self.operators[operator.operator_id]
+				await self.logger.debug('Operator removed! %s' % operator.operator_id)
+				
 			
 	def remove_ophandler(self, ophandler):
 		if ophandler in self.ophandlers:
@@ -135,7 +167,7 @@ class MultiplexorServer:
 		print('adding ophandler')
 		ophandler.operator_dispatch_queue = self.operator_dispatch_queue
 		self.ophandlers[ophandler] = 0
-		asyncio.ensure_future(self.handle_new_operator_event(ophandler))
+		asyncio.ensure_future(self.handle_operator_event(ophandler))
 		asyncio.ensure_future(ophandler.run())
 		
 
@@ -155,7 +187,7 @@ class MultiplexorServer:
 		in case an agent sends and agent ID and a secret on the first connection we treat it that it's an already existing agent that lost the connection to the server and tries to re-register
 		in that scenario we check if we have that agentid with that secret in our table
 		"""
-		while not self.shutdown_evt.is_set() or not agent.trasnport_terminated_evt.is_set():
+		while not self.shutdown_evt.is_set() or not agent.transport_terminated_evt.is_set():
 			cmd = await agent.packetizer.multiplexor_in.get()
 			if agent.status == AgentStatus.CONNECTED:
 				if cmd.cmdtype != ServerCMDType.REGISTER:
@@ -246,11 +278,12 @@ class MultiplexorServer:
 		mcmd.plugin_params = pp.to_list() if pp else pp  #only passing the plugin params that the remote agent needs, usually none
 		await agent.packetizer.multiplexor_out.put(mcmd)
 		await self.logger.debug('plugin start command sent to the client')
+		return plugin_id
 	
 	@mpexception
 	async def handle_agent_main(self, agent):
 		#this msut be invoked after succsessful registration!
-		while not self.shutdown_evt.is_set() or not agent.trasnport_terminated_evt.is_set():
+		while not self.shutdown_evt.is_set() or not agent.transport_terminated_evt.is_set():
 			cmd = await agent.packetizer.multiplexor_in.get()
 			
 			if cmd.cmdtype == ServerCMDType.GET_INFO:
@@ -306,8 +339,12 @@ class MultiplexorServer:
 				log = LogEntry(cmd.severity, src_name, cmd.msg, agent_id = agent.agent_id)
 				await self.logger.logQ.put(log)
 
-				
-		#at this point the agent either lost connection or the server is being stopped
+
+	@mpexception
+	async def terminate_agent(self, agent):
+		self.agent_tasks[agent].cancel()
+		del self.agent_tasks[agent]
+		await self.agents[agent.agent_id].terminate()
 		del self.agents[agent.agent_id]
 	
 	@mpexception
@@ -333,5 +370,8 @@ class MultiplexorServer:
 	async def run(self):
 		asyncio.ensure_future(self.logger.run())
 		while not self.shutdown_evt.is_set():
-			agent = await self.agent_dispatch_queue.get()
-			asyncio.ensure_future(self.handle_agent(agent))
+			agent, status = await self.agent_dispatch_queue.get()
+			if status == 'CONNECTED':
+				self.agent_tasks[agent] = asyncio.create_task(self.handle_agent(agent))
+			else:
+				await self.terminate_agent(agent)

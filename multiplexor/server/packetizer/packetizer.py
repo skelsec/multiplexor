@@ -1,11 +1,11 @@
 import asyncio
 from multiplexor.logger.logger import *
-from multiplexor.protocol.server import *
+from multiplexor.server.protocol.protocol import *
 
 class Packetizer:
 	def __init__(self, logQ, cancellation_evt):
 		self.logger = Logger('Packetizer', logQ = logQ)
-		self.trasnport_terminated_evt = cancellation_evt
+		self.transport_terminated_evt = cancellation_evt
 		self.packetizer_in = asyncio.Queue()
 		self.packetizer_out = asyncio.Queue()
 		self.multiplexor_in = asyncio.Queue()
@@ -19,7 +19,7 @@ class Packetizer:
 		
 	@mpexception
 	async def recv_loop(self):
-		while not self.trasnport_terminated_evt.is_set():
+		while not self.transport_terminated_evt.is_set():
 			#print('Waiting for incoming dat from transport...')
 			data = await self.packetizer_in.get()
 			#print('Data in: %s' % data)
@@ -47,14 +47,14 @@ class Packetizer:
 	
 	@mpexception	
 	async def send_loop(self):
-		while not self.trasnport_terminated_evt.is_set():
+		while not self.transport_terminated_evt.is_set():
 			cmd = await self.multiplexor_out.get()		
 			await self.logger.debug("Sending command: %s" % cmd)
 			data = cmd.to_bytes()
 			self.send_buffer += len(data).to_bytes(4, 'big', signed = False) + data
 			
 			if len(self.send_buffer) > self.max_packet_size:
-				while not self.trasnport_terminated_evt.is_set() and len(self.send_buffer) > self.max_packet_size:
+				while not self.transport_terminated_evt.is_set() and len(self.send_buffer) > self.max_packet_size:
 					await self.packetizer_out.put(self.send_buffer[:self.max_packet_size])
 					self.send_buffer = self.send_buffer[self.max_packet_size:]
 					await asyncio.sleep(0)
