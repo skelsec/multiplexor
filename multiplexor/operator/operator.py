@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 
 from multiplexor.operator.local.common.connector import MultiplexorOperatorConnector
 from multiplexor.operator.local.common.listener import MultiplexorOperatorListener
@@ -28,6 +29,7 @@ class MultiplexorOperator:
 
 		self.connector_task = None
 		self.incoming_task = None
+		self.disconnected_evt = None
 
 	@mpexception
 	async def handle_incoming(self):
@@ -35,23 +37,58 @@ class MultiplexorOperator:
 			try:
 				reply = await self.connector.cmd_in_q.get()
 				print(reply.to_dict())
-				if reply.cmdtype in [OperatorCmdType.START_PLUGIN, OperatorCmdType.PLUGIN_STARTED, OperatorCmdType.PLUGIN_STOPPED, OperatorCmdType.LOG_EVT, OperatorCmdType.PLUGIN_DATA_EVT]:
+				if reply.cmdtype in [OperatorCmdType.START_PLUGIN, OperatorCmdType.PLUGIN_STARTED_EVT, 
+										OperatorCmdType.PLUGIN_STOPPED_EVT, OperatorCmdType.LOG_EVT, 
+										OperatorCmdType.PLUGIN_DATA_EVT, OperatorCmdType.AGENT_CONNECTED_EVT,
+										OperatorCmdType.AGENT_DISCONNECTED_EVT]:
 					if reply.cmdtype == OperatorCmdType.LOG_EVT:
 						await self.logger.log(reply.level, reply.msg)
-					elif reply.cmdtype == OperatorCmdType.PLUGIN_STARTED:
+						try:
+							asyncio.create_task(self.on_log(reply))
+						except Exception as e:
+							await self.logger.exception()
+					elif reply.cmdtype == OperatorCmdType.PLUGIN_STARTED_EVT:
 						self.plugin_created_evt[reply.agent_id][reply.plugin_id].set()
+						try:
+							asyncio.create_task(self.on_plugin_start(reply.agent_id, reply.plugin_id))
+						except Exception as e:
+							await self.logger.exception()
+					elif reply.cmdtype == OperatorCmdType.PLUGIN_STOPPED_EVT:
+						try:
+							asyncio.create_task(self.on_plugin_stop(reply.agent_id, reply.plugin_id))
+						except Exception as e:
+							await self.logger.exception()
+					elif reply.cmdtype == OperatorCmdType.AGENT_CONNECTED_EVT:
+						try:
+							asyncio.create_task(self.on_agent_connect(reply.agent_id, reply.agentinfo))
+						except Exception as e:
+							await self.logger.exception()
+					elif reply.cmdtype == OperatorCmdType.AGENT_DISCONNECTED_EVT:
+						try:
+							asyncio.create_task(self.on_agent_disconnect(reply.agent_id))
+						except Exception as e:
+							await self.logger.exception()
 					continue
 				else:
-					self.reply_buffer[reply.cmd_id] = reply
-					self.reply_buffer_evt[reply.cmd_id].set()
+					if hasattr(reply, 'cmd_id'):
+						if reply.cmd_id is not None:
+							self.reply_buffer[reply.cmd_id] = reply
+							self.reply_buffer_evt[reply.cmd_id].set()
+						else:
+							await self.logger.error('Got reply from server with empty command id!')
+					else:
+							await self.logger.error('Got reply from server without command id!')
 			except Exception as e:
 				#at this point something bad happened, so we are cleaning up
 				#sending out the exception to all cmd ids and notifying them
+				print(str(e))
+				await self.logger.exception()
 				for reply_id in self.reply_buffer:
 					self.reply_buffer[reply_id] = e
 				for reply_id in self.reply_buffer_evt:
 					self.reply_buffer_evt[reply_id].set()
 				break
+		self.disconnected_evt.set()
 
 	@mpexception		
 	async def recv_reply(self, cmd_id):
@@ -81,6 +118,7 @@ class MultiplexorOperator:
 
 	@mpexception
 	async def connect(self):
+		self.disconnected_evt = asyncio.Event()
 		if self.logger is None:
 			self.logger = Logger('Operator')
 			asyncio.ensure_future(self.logger.run())
@@ -136,6 +174,7 @@ class MultiplexorOperator:
 			cmd = OperatorStartPlugin()
 			cmd.agent_id = agent_id
 			cmd.plugin_type = PluginType.SOCKS5.value
+			cmd.operator_token = str(uuid.uuid4())
 			cmd.server = Socks5PluginServerStartupSettings(listen_ip = listen_ip, listen_port = listen_port, auth_type = None, remote = False)
 			cmd_id = await self.send_cmd(cmd)
 			reply = await self.recv_reply(cmd_id)
@@ -147,7 +186,6 @@ class MultiplexorOperator:
 			del self.plugin_created_evt[reply.agent_id][reply.plugin_id]
 
 			reply = await self.info_plugin(agent_id, reply.plugin_id)
-			print('aaaaaaa %s' % reply)
 			return reply
 			
 		else:
@@ -160,6 +198,8 @@ class MultiplexorOperator:
 	@mpexception
 	async def start_sspi(self, agent_id, listen_ip = '127.0.0.1', listen_port = 0, remote = False):
 		if remote == False:
+			if agent_id not in self.plugin_created_evt:
+				self.plugin_created_evt[agent_id] = {}
 			cmd = OperatorStartPlugin()
 			cmd.agent_id = agent_id
 			cmd.plugin_type = PluginType.SSPI.value
@@ -168,9 +208,13 @@ class MultiplexorOperator:
 			reply = await self.recv_reply(cmd_id)
 			if reply.cmdtype == OperatorCmdType.EXCEPTION:
 				raise MultiplexorRemoteException(reply.exc_data)
+
+			self.plugin_created_evt[reply.agent_id][reply.plugin_id] = asyncio.Event()
+			await self.plugin_created_evt[reply.agent_id][reply.plugin_id].wait() #waiting for the plugin creation event
+			del self.plugin_created_evt[reply.agent_id][reply.plugin_id]
+			
 			reply = await self.info_plugin(agent_id, reply.plugin_id)
-			print('aaaaaaa %s' % reply.plugininfo)
-			return reply.plugininfo
+			return reply
 			
 		else:
 			#this passes all controls over to the local sock5server object
@@ -203,6 +247,27 @@ class MultiplexorOperator:
 		if reply.cmdtype == OperatorCmdType.EXCEPTION:
 			raise MultiplexorRemoteException(reply.exc_data)
 		return reply.plugininfo
+
+	async def run(self):
+		await self.connect()
+		await self.disconnected_evt.wait()
+		await self.logger.info('DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD')
+
+
+	async def on_agent_connect(self, agent_id, agentinfo):
+		pass
+
+	async def on_agent_disconnect(self, agent_id):
+		pass
+
+	async def on_plugin_start(self, agent_id, plugin_id):
+		pass
+
+	async def on_plugin_stop(self, agent_id, plugin_id):
+		pass
+	
+	async def on_log(self, log):
+		pass
 
 async def main_loop(args):
 	##setting up logging
@@ -261,18 +326,18 @@ def main():
 	server_group.add_argument('cmd', choices=['list'], help='command')
 	
 	agent_group = subparsers.add_parser('agent', help='Server related commands')
-	agent_group.add_argument('agentid', help='agent ID')
 	agent_group.add_argument('cmd', choices=['list','info'], help='command')
+	agent_group.add_argument('agentid', help='agent ID')
 	
 	
 	plugin_group = subparsers.add_parser('plugin', help='Server related commands')
+	plugin_group.add_argument('cmd', choices=['info'], help='command')
 	plugin_group.add_argument('agentid', help='agent ID')
 	plugin_group.add_argument('pluginid', help='plugin ID')
-	plugin_group.add_argument('cmd', choices=['info'], help='command')
 	
 	create_plugin_group = subparsers.add_parser('create', help='Starts a plugin on the agent')
-	create_plugin_group.add_argument('agentid', help='agent ID')
 	create_plugin_group.add_argument('type', choices=['socks5','sspi'], help='command')
+	create_plugin_group.add_argument('agentid', help='agent ID')
 	create_plugin_group.add_argument('-r', '--remote', action='store_true', help='plugin server will be listening on the mutiplexor server')
 	create_plugin_group.add_argument('-l', '--listen-ip', help='IP to listen on')
 	create_plugin_group.add_argument('-p', '--listen-port', help='Port to listen on')

@@ -121,7 +121,7 @@ class Socks5Client:
 			#for starting the socks5 part we give a maxiumum 2 seconds timeout for the socket client
 			try:
 				result = await asyncio.gather(*[asyncio.wait_for(self.parser.from_streamreader(self.reader, self.current_state, self.mutual_auth_type), timeout=None)], return_exceptions=True)
-			except asyncio.CancelledError as e:
+			except asyncio.CancelledError:
 				return
 			if isinstance(result[0], R3ConnectionClosed):
 				return
@@ -136,8 +136,8 @@ class Socks5Client:
 				mutual, mutual_idx = get_mutual_preference(self.supported_auth_types, msg.METHODS)
 				if mutual is None:
 					await self.logger.debug('No common authentication types! Client supports %s' % (','.join([str(x) for x in msg.METHODS])))
-					t = await asyncio.wait_for(self.socket_send(SOCKS5NegoReply.construct_auth(SOCKS5Method.NOTACCEPTABLE).to_bytes()), timeout = 1)
-					writer.close()
+					await asyncio.wait_for(self.socket_send(SOCKS5NegoReply.construct_auth(SOCKS5Method.NOTACCEPTABLE).to_bytes()), timeout = 1)
+					self.writer.close()
 					return
 				await self.logger.debug('Mutual authentication type: %s' % mutual)
 				self.mutual_auth_type = mutual
@@ -152,7 +152,7 @@ class Socks5Client:
 					self.session.current_state = SOCKS5ServerState.NOT_AUTHENTICATED
 				"""
 
-				t = await asyncio.wait_for(self.socket_send( SOCKS5NegoReply.construct(self.mutual_auth_type).to_bytes()), timeout = 1)
+				await asyncio.wait_for(self.socket_send( SOCKS5NegoReply.construct(self.mutual_auth_type).to_bytes()), timeout = 1)
 		
 				"""
 				elif self.session.current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
@@ -225,7 +225,7 @@ class Socks5Client:
 						return
 
 			else:
-				t = await asyncio.wait_for(SOCKS5Reply.construct(SOCKS5ReplyType.COMMAND_NOT_SUPPORTED, self.session.allinterface, 0).to_bytes(), timeout = 1)	
+				await asyncio.wait_for(SOCKS5Reply.construct(SOCKS5ReplyType.COMMAND_NOT_SUPPORTED, self.session.allinterface, 0).to_bytes(), timeout = 1)	
 		
 
 class MultiplexorSocks5(MultiplexorPluginBase):

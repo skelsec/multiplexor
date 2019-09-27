@@ -327,7 +327,7 @@ class SOCKS5Nego:
 		t = await read_or_exc(reader,1, timeout = timeout)
 		nego.NMETHODS = int.from_bytes(t, byteorder = 'big', signed = False)
 		nego.METHODS = []
-		for i in range(nego.NMETHODS):
+		for _ in range(nego.NMETHODS):
 			t = await read_or_exc(reader,1, timeout = timeout)
 			nego.METHODS.append(SOCKS5Method(int.from_bytes(t, byteorder = 'big', signed = False)))
 
@@ -343,7 +343,7 @@ class SOCKS5Nego:
 		nego.VER = int.from_bytes(buff.read(1), byteorder = 'big', signed = False) 
 		nego.NMETHODS = int.from_bytes(buff.read(1), byteorder = 'big', signed = False) 
 		nego.METHODS = []
-		for i in range(nego.NMETHODS):
+		for _ in range(nego.NMETHODS):
 			nego.METHODS.append(SOCKS5Method(int.from_bytes(buff.read(1), byteorder = 'big', signed = False)))
 		return nego
 
@@ -388,7 +388,7 @@ class SOCKS5NegoReply:
 				break
 		print(data)
 		return SOCKS5NegoReply.from_bytes(data)
-
+	@staticmethod
 	async def from_streamreader(reader, timeout = None):
 		rep = SOCKS5NegoReply()
 		t = await read_or_exc(reader,1, timeout = timeout)

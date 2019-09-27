@@ -155,22 +155,17 @@ class MultiplexorPluginStartedEvt:
 	def __init__(self):
 		self.cmdtype = ServerCMDType.PLUGIN_STARTED_EVT
 		self.plugin_id = None
-		self.operator_token = None
 	
 	@staticmethod
 	def from_cmd(cmd):
 		p = MultiplexorPluginStartedEvt()
 		p.plugin_id = cmd.params[0].decode()
-		if len(cmd.params) > 1:
-			p.operator_token = cmd.params[1].decode()
 		return p
 		
 	def to_bytes(self):
 		cmd = MultiplexorCMD()
 		cmd.cmdtype = self.cmdtype
 		cmd.params.append(self.plugin_id.encode())
-		if self.operator_token:
-			cmd.params.append(self.operator_token.encode())
 		return cmd.to_bytes()
 		
 class MultiplexorAgentLog:

@@ -11,12 +11,14 @@ class OperatorCmdType(enum.Enum):
 	GET_PLUGIN_INFO = 6
 	GET_PLUGIN_INFO_RPLY = 7
 	START_PLUGIN = 8
-	PLUGIN_STARTED = 9
-	PLUGIN_STOPPED = 10
+	PLUGIN_STARTED_EVT = 9
+	PLUGIN_STOPPED_EVT = 10
 	LOG_EVT = 11
 	PLUGIN_DATA_EVT = 12
 	EXCEPTION = 13
 	START_PLUGIN_RPLY = 14
+	AGENT_CONNECTED_EVT = 15
+	AGENT_DISCONNECTED_EVT = 16
 
 class OperatorCmdParser:
 	
@@ -248,6 +250,7 @@ class OperatorStartPlugin:
 		self.agent_id = agent_id
 		self.plugin_type = plugin_type
 		self.cmd_id = cmd_id
+		self.operator_token = operator_token
 		
 		self.server = {} #startup parameters for the multiplexor server
 		self.agent = {} #startup parameters for the remote agent
@@ -261,7 +264,8 @@ class OperatorStartPlugin:
 			'plugin_type' : self.plugin_type,
 			'server' : self.server.to_dict() if self.server else None,
 			'agent' : self.agent.to_dict() if self.agent else None,
-			'cmd_id': self.cmd_id
+			'cmd_id': self.cmd_id,
+			'operator_token' : self.operator_token
 
 		}
 	
@@ -271,6 +275,7 @@ class OperatorStartPlugin:
 		t.cmd_id = d['cmd_id']
 		t.agent_id = d['agent_id']
 		t.plugin_type = d['plugin_type']
+		t.operator_token = d['operator_token']
 		t.server = d.get('server') if d.get('server') else None
 		t.agent = d.get('agent') if d.get('agent') else None
 		return t
@@ -297,9 +302,9 @@ class OperatorStartPluginRply:
 		t.plugin_id = d['plugin_id']
 		return t
 		
-class OperatorPluginStarted:
+class OperatorPluginStartedEvt:
 	def __init__(self):
-		self.cmdtype = OperatorCmdType.PLUGIN_STARTED
+		self.cmdtype = OperatorCmdType.PLUGIN_STARTED_EVT
 		self.agent_id = None
 		self.plugin_id = None
 		self.operator_token = None
@@ -314,15 +319,15 @@ class OperatorPluginStarted:
 	
 	@staticmethod
 	def from_dict(d):
-		t = OperatorPluginStarted()
+		t = OperatorPluginStartedEvt()
 		t.agent_id = d['agent_id']
 		t.plugin_id = d['plugin_id']
 		t.operator_token = d['operator_token']
 		return t
 		
-class OperatorPluginStopped:
+class OperatorPluginStoppedEvt:
 	def __init__(self):
-		self.cmdtype = OperatorCmdType.PLUGIN_STOPPED
+		self.cmdtype = OperatorCmdType.PLUGIN_STOPPED_EVT
 		self.agent_id = None
 		self.plugin_id = None
 		self.operator_token = None
@@ -337,7 +342,7 @@ class OperatorPluginStopped:
 	
 	@staticmethod
 	def from_dict(d):
-		t = OperatorPluginStarted()
+		t = OperatorPluginStoppedEvt()
 		t.agent_id = d['agent_id']
 		t.plugin_id = d['plugin_id']
 		t.operator_token = d['operator_token']
@@ -365,6 +370,43 @@ class OperatorPluginData:
 		t.plugin_id = d['plugin_id']
 		t.data = d['data']
 		return t
+
+class OperatorAgentConnectedEvt:
+	def __init__(self):
+		self.cmdtype = OperatorCmdType.AGENT_CONNECTED_EVT
+		self.agent_id = None
+		self.agentinfo = None
+		
+	def to_dict(self):
+		return {
+			'cmdtype' : self.cmdtype.value,
+			'agent_id' : self.agent_id,
+			'agentinfo' : self.agentinfo,
+		}
+	
+	@staticmethod
+	def from_dict(d):
+		t = OperatorAgentConnectedEvt()
+		t.agent_id = d['agent_id']
+		t.agentinfo = d['agentinfo']
+		return t
+
+class OperatorAgentDisconnectedEvt:
+	def __init__(self):
+		self.cmdtype = OperatorCmdType.AGENT_DISCONNECTED_EVT
+		self.agent_id = None
+		
+	def to_dict(self):
+		return {
+			'cmdtype' : self.cmdtype.value,
+			'agent_id' : self.agent_id,
+		}
+	
+	@staticmethod
+	def from_dict(d):
+		t = OperatorAgentDisconnectedEvt()
+		t.agent_id = d['agent_id']
+		return t
 		
 type2obj = {
 	OperatorCmdType.LIST_AGENTS : OperatorListAgentsCmd,
@@ -376,10 +418,12 @@ type2obj = {
 	OperatorCmdType.GET_PLUGIN_INFO : OperatorGetPluginInfoCmd,
 	OperatorCmdType.GET_PLUGIN_INFO_RPLY : OperatorGetPluginInfoRply,
 	OperatorCmdType.START_PLUGIN : OperatorStartPlugin,
-	OperatorCmdType.PLUGIN_STARTED : OperatorPluginStarted,
-	OperatorCmdType.PLUGIN_STOPPED : OperatorPluginStopped,
+	OperatorCmdType.PLUGIN_STARTED_EVT : OperatorPluginStartedEvt,
+	OperatorCmdType.PLUGIN_STOPPED_EVT : OperatorPluginStoppedEvt,
 	OperatorCmdType.PLUGIN_DATA_EVT : OperatorPluginData,
 	OperatorCmdType.LOG_EVT : OperatorLogEvent,
 	OperatorCmdType.EXCEPTION : OperatorExceptionEvt,
 	OperatorCmdType.START_PLUGIN_RPLY : OperatorStartPluginRply,
+	OperatorCmdType.AGENT_CONNECTED_EVT : OperatorAgentConnectedEvt,
+	OperatorCmdType.AGENT_DISCONNECTED_EVT : OperatorAgentDisconnectedEvt,
 }

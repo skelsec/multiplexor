@@ -22,6 +22,7 @@ class MultiplexorAgent:
 		self.plugin_ctr = 0
 		self.plugins = {}
 		self.plugin_taks = {}
+		self.plugin_operator = {} #plugin_id -> operator
 		
 		self.status = AgentStatus.CONNECTED
 		
@@ -51,9 +52,10 @@ class MultiplexorAgent:
 		#at this pont the plugin stopped / agent disconnected
 		del self.plugins[plugin.plugin_id]		
 		
-	def add_plugin(self, plugin_obj, cmd):
+	def add_plugin(self, plugin_obj, cmd, operator):
 		plugin_id = str(self.plugin_ctr)
 		self.plugin_ctr += 1
+		self.plugin_operator[plugin_id] = operator
 		self.plugins[plugin_id] = plugin_obj(plugin_id, self.logger.logQ, cmd.plugin_type, cmd.server)
 		self.plugin_taks[plugin_id] = asyncio.create_task(self.handle_plugin_out(self.plugins[plugin_id]))
 		return plugin_id
