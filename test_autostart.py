@@ -29,13 +29,13 @@ class MultiplexorAutoStart(MultiplexorOperator):
 				await self.logger.exception()
 				return
 			
-			try:
-				plugin_id = await self.start_sspi(agent_id, listen_ip = '127.0.0.1', listen_port = 0, remote = False)
-				print(plugin_id)
-			
-			except:
-				await self.logger.exception()
-				return
+			#try:
+			#	plugin_id = await self.start_sspi(agent_id, listen_ip = '127.0.0.1', listen_port = 0, remote = False)
+			#	print(plugin_id)
+			#
+			#except:
+			#	await self.logger.exception()
+			#	return
 			
 			self.agent_tracker[agent_id] = agentinfo
 

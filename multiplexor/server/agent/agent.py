@@ -30,6 +30,8 @@ class MultiplexorAgent:
 
 	@mpexception
 	async def terminate(self):
+		for plugin_id in self.plugins:
+			await self.plugins[plugin_id].terminate()
 		for plugin_id in self.plugin_taks:
 			self.plugin_taks[plugin_id].cancel()
 		

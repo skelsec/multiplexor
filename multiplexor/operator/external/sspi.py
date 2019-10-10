@@ -2,7 +2,9 @@ import asyncio
 import websockets
 import json
 import base64
+import multiprocessing
 
+from multiplexor.utils.apq import AsyncProcessQueue
 from multiplexor.plugins.sspi.pluginprotocol import *
 
 class SSPINTLMClient:
@@ -32,32 +34,62 @@ class SSPINTLMClient:
 		rply = SSPIPluginCMD.from_dict(json.loads(data))
 		self.data = rply.authdata
 		
-		
+class LDAP3NTLMSSPIProcess(multiprocessing.Process):
+	def __init__(self, url, in_q, out_q):
+		multiprocessing.Process.__init__(self)
+		self.client = None
+		self.in_q = in_q
+		self.out_q = out_q
+		self.url = url
+
+	async def main(self):
+		self.client = SSPINTLMClient(self.url)
+		await self.client.connect()
+		await self.client.authenticate()
+		await self.out_q.coro_put(self.client.data)
+		autorize_data = await self.in_q.coro_get()
+		await self.client.challenge(autorize_data)
+		await self.out_q.coro_put(self.client.data)
+
+	def run(self):
+		asyncio.run(self.main())
+
 class LDAP3NTLMSSPI:
 	def __init__(self, user_name = None, domain = None, password = None):
-		url = 'ws://127.0.0.1:58232'
-		self.client = SSPINTLMClient(url)
+		##
+		## Since this is a monkey patching object, we cannot control the input parameter count
+		## We need to know the URL tho, and since the password filed is not used norally (no point using this object if you know the password)
+		## The password filed is used to get the actual URL of the SSPI server
+		##
+		## Make no mistake, this "solution" is as ugly as it gets. The reason I use this is: I really don't wish to re-write the enitre ldap3 library...
+		##
+		
 		
 		self.client_name = None
 		self.target_name = None
+		self.password = password
 		
 		self.authenticate_data = None
+		self.aproc = None
+		self.in_q = AsyncProcessQueue()
+		self.out_q = AsyncProcessQueue()
 		
 	def create_negotiate_message(self):
-		print('Connecting to %s' % self.client.server_url)
-		asyncio.get_event_loop().run_until_complete(self.client.connect())
+		print('Connecting to %s' % self.password)
+		self.aproc = LDAP3NTLMSSPIProcess(self.password, self.in_q, self.out_q)
+		self.aproc.start()
 		print('Connected!')
 		print('Getting auth data!')
-		asyncio.get_event_loop().run_until_complete(self.client.authenticate())
-		
-		return base64.b64decode(self.client.data)
+		data = self.out_q.get()
+
+		return base64.b64decode(data)
 		
 	def create_authenticate_message(self):
 		return self.authenticate_data
 		
-		
 	def parse_challenge_message(self, autorize_data):
 		print('Getting authenticate data!')
-		asyncio.get_event_loop().run_until_complete(self.client.challenge(autorize_data))
-		self.authenticate_data = base64.b64decode(self.client.data)
+		self.in_q.put(autorize_data)
+		data = self.out_q.get()
+		self.authenticate_data = base64.b64decode(data)
 	

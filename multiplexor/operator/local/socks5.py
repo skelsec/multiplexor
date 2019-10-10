@@ -29,6 +29,9 @@ class MultiplexorSocks5Operator:
 		
 		self.plugin_info = Socks5PluginInfo()
 		self.stop_plugin_evt = asyncio.Event()
+
+		self.server_reply_task = None
+		self.server = None
 		
 	@mpexception
 	async def handle_plugin_out(self, plugin_out_q):
@@ -124,13 +127,17 @@ class MultiplexorSocks5Operator:
 			
 				#print('handle_plugin_data_in exiting!')
 
+	@mpexception
+	async def terminate(self):
+		await self.server.close()
+		self.server_reply_task.cancel()
 			
 	@mpexception
 	async def run(self):
 		await self.logger.info('Watiting for server connection...')
 		await self.connector.server_connected.wait()
 		await self.logger.info('Server connected! Setting up SOCKS5 proxy!')
-		asyncio.ensure_future(self.handle_server_rply())
+		self.server_reply_task = asyncio.create_task(self.handle_server_rply())
 		await self.logger.info('Starting SOCKS5 on the agent...')
 		await self.start_socks5_plugin()
 

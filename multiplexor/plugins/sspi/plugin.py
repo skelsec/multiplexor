@@ -58,7 +58,12 @@ class MultiplexorSSPI(MultiplexorPluginBase):
 		
 		self.dispatch_table = {} #session_id to Socks5Client
 		self.current_session_id = 0
-		
+	
+	@mpexception		
+	async def terminate(self):
+		#TODO!
+		return
+	
 	@mpexception		
 	async def handle_plugin_data_in(self):
 		"""

@@ -370,9 +370,9 @@ class MultiplexorServer:
 		for k in self.operators:
 			await self.operators[k].multiplexor_cmd_out.put(rply)
 
+		await agent.terminate()
 		self.agent_tasks[agent].cancel()
 		del self.agent_tasks[agent]
-		await self.agents[agent.agent_id].terminate()
 		del self.agents[agent.agent_id]
 	
 	@mpexception

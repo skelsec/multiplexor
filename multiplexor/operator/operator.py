@@ -18,7 +18,7 @@ class MultiplexorOperator:
 
 	Use this for managing the server, either via command line or programaticcally using the APIs this object exposes.
 	"""
-	def __init__(self, connection_string, logger = None):
+	def __init__(self, connection_string, logger = None, reconnect_tries = None):
 		self.connection_string = connection_string
 		self.connector = None
 		self.logger = logger
@@ -30,6 +30,7 @@ class MultiplexorOperator:
 		self.connector_task = None
 		self.incoming_task = None
 		self.disconnected_evt = None
+		self.reconnect_tries = reconnect_tries
 
 	@mpexception
 	async def handle_incoming(self):
@@ -123,9 +124,14 @@ class MultiplexorOperator:
 			self.logger = Logger('Operator')
 			asyncio.ensure_future(self.logger.run())
 
-		self.connector = MultiplexorOperatorConnector(self.connection_string, self.logger.logQ, ssl_ctx = None, reconnect_interval = 5)
+		self.connector = MultiplexorOperatorConnector(self.connection_string, self.logger.logQ, ssl_ctx = None, reconnect_interval = 5, reconnect_tries=self.reconnect_tries)
 		self.connector_task = asyncio.create_task(self.connector.run())
-		await asyncio.wait_for(self.connector.server_connected.wait(), timeout = 5) #waiting until connector managed to connect to the multiplexor server
+		try:
+			await asyncio.wait_for(self.connector.server_connected.wait(), timeout = 1) #waiting until connector managed to connect to the multiplexor server
+		except asyncio.TimeoutError:
+			await self.terminate()
+			raise Exception('Server failed to connect!')
+			
 		self.incoming_task = asyncio.create_task(self.handle_incoming())
 
 	@mpexception
@@ -146,10 +152,10 @@ class MultiplexorOperator:
 	async def terminate(self):
 		if self.incoming_task:
 			self.incoming_task.cancel()
-		if self.connector_task:
-			self.connector_task.cancel()
 		if self.connector:
 			await self.connector.terminate()
+		if self.connector_task:
+			self.connector_task.cancel()
 		self.connector_task = None
 
 		self.connector = None

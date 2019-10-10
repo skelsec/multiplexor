@@ -105,8 +105,8 @@ def mpexception(funct):
 			return t
 		except asyncio.CancelledError:
 			return
-		except:
+		except Exception as e:
 			await this.logger.exception(funct.__name__)
-			return
+			raise e
 			
 	return wrapper

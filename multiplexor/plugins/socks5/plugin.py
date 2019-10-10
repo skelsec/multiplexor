@@ -22,11 +22,12 @@ class MultiplexorSocks5SocketProxy:
 		self.socket_queue_in = None
 		self.socket_queue_out = None
 		
-		self.server = None
+		self.send_task = None
+		self.recv_task = None
 		
 	def run(self):
-		asyncio.ensure_future(self.proxy_send())
-		asyncio.ensure_future(self.proxy_recv())
+		self.send_task = asyncio.create_task(self.proxy_send())
+		self.recv_task = asyncio.create_task(self.proxy_recv())
 		
 	async def proxy_send(self):
 		"""
@@ -105,6 +106,7 @@ class Socks5Client:
 		self.parser = SOCKS5CommandParser
 		
 		self.remote_in = asyncio.Queue()
+		self.proxy_tasks = []
 		
 	
 	@mpexception
@@ -112,6 +114,8 @@ class Socks5Client:
 		"""
 		this is just a dumb helper function
 		"""
+		for t in self.proxy_tasks:
+			t.cancel()
 		self.writer.write(data)
 		await self.writer.drain()
 	
@@ -234,6 +238,14 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 		
 		self.dispatch_table = {} #socket_id to Socks5Client
 		self.current_socket_id = 0
+		self.plugin_in_task = None
+		self.server = None
+
+	@mpexception
+	async def terminate(self):
+		if self.server is not None:
+			self.server.close()
+		self.plugin_in_task.cancel()
 		
 	@mpexception		
 	async def handle_plugin_data_in(self):
@@ -327,6 +339,6 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 		The main function of the plugin.
 		Sets up a listener server and the Task to dispatch incoming commands to the appropriate sockets
 		"""
-		asyncio.ensure_future(self.handle_plugin_data_in())
+		self.plugin_in_task = asyncio.create_task(self.handle_plugin_data_in())
 		await self.server.serve_forever()
 			

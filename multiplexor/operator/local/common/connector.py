@@ -8,11 +8,12 @@ from multiplexor.logger.logger import mpexception, Logger
 
 
 class MultiplexorOperatorConnector:
-	def __init__(self, server_url, logQ, ssl_ctx = None, reconnect_interval = 5):
+	def __init__(self, server_url, logQ, ssl_ctx = None, reconnect_interval = 5, reconnect_tries = None):
 		self.logger = Logger("Connector", logQ)
 		self.server_url = server_url
 		self.ssl_ctx = ssl_ctx
 		self.reconnect_interval = reconnect_interval
+		self.reconnect_tries = reconnect_tries
 
 		self.cmd_out_q = asyncio.Queue()
 		self.cmd_in_q = asyncio.Queue()
@@ -36,9 +37,14 @@ class MultiplexorOperatorConnector:
 
 	@mpexception
 	async def terminate(self):
-		self.in_task.cancel()
-		self.out_task.cancel()
-		await self.current_ws.close()
+		if self.in_task:
+			self.in_task.cancel()
+		if self.out_task:
+			self.out_task.cancel()
+		if self.current_ws:
+			#this is ugly, I know BUT official way takes FOREVER to close...
+			self.current_ws.writer._transport.abort()
+			#await self.current_ws.close()
 
 		self.in_task = None
 		self.out_task = None
@@ -47,6 +53,10 @@ class MultiplexorOperatorConnector:
 
 	async def run(self):
 		while True:
+			if self.reconnect_tries is not None:
+				self.reconnect_tries -= 1
+				if self.reconnect_tries < 0:
+					return
 			await self.logger.info('Connecting to server')
 			try:
 				ws = await websockets.connect(self.server_url)
