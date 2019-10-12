@@ -7,32 +7,57 @@ import multiprocessing
 from multiplexor.utils.apq import AsyncProcessQueue
 from multiplexor.plugins.sspi.pluginprotocol import *
 
+class KerberosSSPIClient:
+	def __init__(self, url):
+		self.server_url = url
+		self.transport = None
+		
+	async def connect(self):
+		self.transport = await websockets.connect(self.server_url)
+
 class SSPINTLMClient:
 	def __init__(self, url):
 		self.server_url = url
 		self.transport = None
-		self.data = None
 		
 	async def connect(self):
 		self.transport = await websockets.connect(self.server_url)
 		
-	async def authenticate(self):
-		ac = SSPINTLMAuthCmd()
-		ac.client_name = None
-		ac.cred_usage = '3'
-		await self.transport.send(json.dumps(ac.to_dict()))
-		data = await self.transport.recv()
-		rply = SSPIPluginCMD.from_dict(json.loads(data))
-		self.data = rply.authdata
+	async def authenticate(self, is_rpc = False):
+		try:
+			ac = SSPINTLMAuthCmd()
+			ac.client_name = None
+			ac.cred_usage = '3'
+			await self.transport.send(json.dumps(ac.to_dict()))
+			data = await self.transport.recv()
+			rply = SSPIPluginCMD.from_dict(json.loads(data))
+			return base64.b64decode(rply.authdata), None
+		except Exception as e:
+			return None, e
 		
-	async def challenge(self, challenge):
-		ac = SSPINTLMChallengeCmd()
-		ac.cred_usage = '3'
-		ac.token = base64.b64encode(challenge).decode()
-		await self.transport.send(json.dumps(ac.to_dict()))
-		data = await self.transport.recv()
-		rply = SSPIPluginCMD.from_dict(json.loads(data))
-		self.data = rply.authdata
+	async def challenge(self, challenge, is_rpc = False):
+		try:
+			ac = SSPINTLMChallengeCmd()
+			ac.cred_usage = '3'
+			ac.token = base64.b64encode(challenge).decode()
+			await self.transport.send(json.dumps(ac.to_dict()))
+			data = await self.transport.recv()
+			rply = SSPIPluginCMD.from_dict(json.loads(data))
+			return base64.b64decode(rply.authdata), None
+		
+		except Exception as e:
+			return None, e
+
+	async def get_session_key(self):
+		try:
+			ac = SSPIGetSessionKeyCmd()
+			await self.transport.send(json.dumps(ac.to_dict()))
+			data = await self.transport.recv()
+			rply = SSPIPluginCMD.from_dict(json.loads(data))
+			return base64.b64decode(rply.session_key), None
+		except Exception as e:
+			return None, e
+		
 		
 class LDAP3NTLMSSPIProcess(multiprocessing.Process):
 	def __init__(self, url, in_q, out_q):

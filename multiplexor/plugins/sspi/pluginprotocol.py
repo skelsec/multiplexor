@@ -19,7 +19,7 @@ class SSPICmdType(enum.Enum):
 	EncryptMessage = 10
 	EncryptMessageRply = 11	
 	Winerror = 12
-	GET_SESSIONKEY = 13,
+	GET_SESSIONKEY = 13
 	GET_SESSIONKEY_RPLY = 14
         
 	
@@ -493,19 +493,38 @@ class SSPIGetSessionKeyRply:
 	def __init__(self):
 		self.cmdtype = SSPICmdType.GET_SESSIONKEY_RPLY
 		self.session_id = None
+		self.result = None
 		self.session_key = None
-
+	
 	@staticmethod
 	def from_cmd(cmd):
 		p = SSPIGetSessionKeyRply()
 		p.session_id = cmd.params[0]
-		p.session_key = cmd.params[1]
+		p.result = cmd.params[1]
+		p.session_key = cmd.params[2]
+
 		return p
+
+	def to_dict(self):
+		return {
+			'cmdtype' : self.cmdtype.value,
+			'result' : self.result ,
+			'session_key' : self.session_key ,	
+		}
+
+	@staticmethod
+	def from_dict(d):
+		c = SSPIGetSessionKeyRply()
+		c.result = d['result']
+		c.session_key = d['session_key']
 		
+		return c
+
 	def to_bytes(self):
 		cmd = SSPIPluginCMD()
 		cmd.cmdtype = self.cmdtype
 		cmd.params.append(self.session_id)
+		cmd.params.append(self.result)
 		cmd.params.append(self.session_key)
 		return cmd.to_bytes()
 	
@@ -569,7 +588,6 @@ class SSPIPluginCMD:
 		return t
 
 type2obj = {
-	
 	SSPICmdType.CONNECT : SSPIConnectCmd, 
 	SSPICmdType.TERMINATED : None, 
 	SSPICmdType.NTLM_AUTH : SSPINTLMAuthCmd, 
