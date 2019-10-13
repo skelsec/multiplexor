@@ -15,6 +15,34 @@ class KerberosSSPIClient:
 	async def connect(self):
 		self.transport = await websockets.connect(self.server_url)
 
+	async def authenticate(self, target_name, flags = None, token_data = None):
+		try:
+			ac = SSPIKerberosAuthCmd()
+			ac.client_name = None
+			ac.cred_usage = '3'
+			ac.flags = flags
+			ac.target_name = target_name
+
+			ac.token_data = token_data
+			if token_data is not None:
+				ac.token_data = base64.b64encode(token_data).decode()
+			await self.transport.send(json.dumps(ac.to_dict()))
+			data = await self.transport.recv()
+			rply = SSPIPluginCMD.from_dict(json.loads(data))
+			return base64.b64decode(rply.authdata), None
+		except Exception as e:
+			return None, e
+
+	async def get_session_key(self):
+		try:
+			ac = SSPIGetSessionKeyCmd()
+			await self.transport.send(json.dumps(ac.to_dict()))
+			data = await self.transport.recv()
+			rply = SSPIPluginCMD.from_dict(json.loads(data))
+			return base64.b64decode(rply.session_key), None
+		except Exception as e:
+			return None, e
+
 class SSPINTLMClient:
 	def __init__(self, url):
 		self.server_url = url

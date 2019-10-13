@@ -102,6 +102,7 @@ class SSPIKerberosAuthCmd:
 		self.cred_usage = None
 		self.flags = None
 		self.target_name = None
+		self.token_data = None
 		
 	def to_dict(self):
 		return {
@@ -110,6 +111,7 @@ class SSPIKerberosAuthCmd:
 			'cred_usage' : self.cred_usage ,
 			'target_name' : self.target_name ,
 			'flags': self.flags ,
+			'token_data': self.token_data
 		}
 	
 	@staticmethod
@@ -119,6 +121,7 @@ class SSPIKerberosAuthCmd:
 		c.cred_usage = d['cred_usage']
 		c.target_name = d['target_name']
 		c.flags = d['flags']
+		c.token_data = d['token_data']
 		
 		return c
 	
@@ -130,6 +133,7 @@ class SSPIKerberosAuthCmd:
 		p.cred_usage = cmd.params[2]
 		p.target_name = cmd.params[3]
 		p.flags = cmd.params[4]
+		p.token_data = cmd.params[5]
 		return p
 		
 	def to_bytes(self):
@@ -140,6 +144,7 @@ class SSPIKerberosAuthCmd:
 		cmd.params.append(self.cred_usage)
 		cmd.params.append(self.target_name)
 		cmd.params.append(self.flags)
+		cmd.params.append(self.token_data)
 		return cmd.to_bytes()
 		
 class SSPIKerberosAuthRply:
