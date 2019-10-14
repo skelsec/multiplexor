@@ -98,11 +98,11 @@ class LDAP3NTLMSSPIProcess(multiprocessing.Process):
 	async def main(self):
 		self.client = SSPINTLMClient(self.url)
 		await self.client.connect()
-		await self.client.authenticate()
-		await self.out_q.coro_put(self.client.data)
+		data, res = await self.client.authenticate()
+		await self.out_q.coro_put((data, res))
 		autorize_data = await self.in_q.coro_get()
-		await self.client.challenge(autorize_data)
-		await self.out_q.coro_put(self.client.data)
+		data, res = await self.client.challenge(autorize_data)
+		await self.out_q.coro_put((data, res))
 
 	def run(self):
 		asyncio.run(self.main())
@@ -133,9 +133,9 @@ class LDAP3NTLMSSPI:
 		self.aproc.start()
 		print('Connected!')
 		print('Getting auth data!')
-		data = self.out_q.get()
+		data, res = self.out_q.get()
 
-		return base64.b64decode(data)
+		return data
 		
 	def create_authenticate_message(self):
 		return self.authenticate_data
@@ -143,6 +143,6 @@ class LDAP3NTLMSSPI:
 	def parse_challenge_message(self, autorize_data):
 		print('Getting authenticate data!')
 		self.in_q.put(autorize_data)
-		data = self.out_q.get()
-		self.authenticate_data = base64.b64decode(data)
+		data, res = self.out_q.get()
+		self.authenticate_data = data
 	
