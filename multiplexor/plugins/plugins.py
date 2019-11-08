@@ -16,6 +16,7 @@ class MultiplexorPluginBase:
 		self.plugin_info = None #should b overridden by the inheritor
 		self.plugin_type = plugin_type
 		self.plugin_params = plugin_params
+		self.server = None
 	
 	@mpexception
 	async def handle_in_raw(self):

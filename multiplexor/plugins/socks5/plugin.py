@@ -73,17 +73,23 @@ class MultiplexorSocks5SocketProxy:
 		In case SOCKET_TERMINATED_EVT the socket will be closed and the event to shut down the socket proxy is set
 		"""
 		while not self.socket_terminated_evt.is_set() or not self.stop_plugin_evt.is_set():
-			cmd = await self.socket_queue_in.get()
-			if cmd.cmdtype == Socks5ServerCmdType.SOCKET_DATA:
-				self.writer.write(cmd.data)
-			
-			elif cmd.cmdtype == Socks5ServerCmdType.SOCKET_TERMINATED_EVT:
-				#remote agent's socket broken, closing down ours as well
-				self.writer.close()
-				self.socket_terminated_evt.set()
+			try:
+				cmd = await self.socket_queue_in.get()
+				if cmd.cmdtype == Socks5ServerCmdType.SOCKET_DATA:
+					self.writer.write(cmd.data)
 				
-			else:
-				await self.logger.debug('Got unexpected command type: %s' % cmd.cmdtype)	
+				elif cmd.cmdtype == Socks5ServerCmdType.SOCKET_TERMINATED_EVT:
+					#remote agent's socket broken, closing down ours as well
+					self.writer.close()
+					self.socket_terminated_evt.set()
+					
+				else:
+					await self.logger.debug('Got unexpected command type: %s' % cmd.cmdtype)
+			except asyncio.CancelledError:
+				return
+			except Exception as e:
+				print(e)
+				raise e
 	
 class Socks5Client:
 	"""
@@ -184,6 +190,7 @@ class Socks5Client:
 					cmd.socket_id = str(self.socket_id)
 					cmd.dst_addr = str(msg.DST_ADDR)
 					cmd.dst_port = str(msg.DST_PORT)
+					cmd.connect_timeout = 5
 					
 					await self.plugin_out.put(cmd.to_bytes())
 					

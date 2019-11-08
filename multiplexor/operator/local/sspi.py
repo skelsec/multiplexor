@@ -9,7 +9,7 @@ from multiplexor.plugins.plugins import *
 from multiplexor.plugins.sspi.pluginsettings import *
 from multiplexor.plugins.sspi.pluginprotocol import *
 from multiplexor.plugins.sspi.plugininfo import *
-from multiplexor.plugins.sspi.plugin import SSPIClient
+from multiplexor.plugins.sspi.plugin import SSPIOperator
 from multiplexor.logger.logger import *
 
 
@@ -81,7 +81,7 @@ class MultiplexorSSPIOperator:
 		session_id = str(self.current_session_id)
 		outQ = asyncio.Queue()
 		asyncio.ensure_future(self.handle_plugin_out(outQ))
-		client = SSPIClient(session_id, self.logger.logQ, websocket, self.stop_plugin_evt, None, outQ, self.plugin_info)
+		client = SSPIOperator(session_id, self.logger.logQ, websocket, None, outQ, self.plugin_info)
 		self.dispatch_table[session_id] = client
 		await client.handle_sspi_client()
 		await self.logger.info('Client disconnected (%s:%s)' % (client_ip, client_port))
@@ -114,6 +114,7 @@ class MultiplexorSSPIOperator:
 		await self.start_sspi_plugin()
 
 		self.server = await websockets.serve(self.handle_client, self.sspi_listen_ip, self.sspi_listen_port, ssl=None)
+		print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! %s' % self.server) 
 		#self.server = await asyncio.start_server(self.handle_socks_client, self.socks5_listen_ip, self.socks5_listen_port)
 		listen_ip, listen_port = self.server.sockets[0].getsockname()
 		await self.logger.info('Local SSPI server listening on %s:%s' % (listen_ip, listen_port))

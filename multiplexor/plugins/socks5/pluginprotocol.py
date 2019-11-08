@@ -16,6 +16,7 @@ class Socks5PluginConnectCmd:
 		self.socket_id = None
 		self.dst_addr = None
 		self.dst_port = None
+		self.connect_timeout = None
 	
 	@staticmethod
 	def from_cmd(cmd):
@@ -24,6 +25,7 @@ class Socks5PluginConnectCmd:
 		if len(cmd.params) > 1:
 			p.dst_addr = cmd.params[1].decode()
 			p.dst_port = cmd.params[2].decode()
+			p.connect_timeout = cmd.params[3].decode()
 		return p
 		
 	def to_bytes(self):
@@ -32,6 +34,7 @@ class Socks5PluginConnectCmd:
 		cmd.params.append(self.socket_id.encode())
 		cmd.params.append(self.dst_addr.encode())
 		cmd.params.append(self.dst_port.encode())
+		cmd.params.append(str(self.connect_timeout).encode())
 		return cmd.to_bytes()
 		
 class Socks5PluginListenCmd:

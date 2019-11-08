@@ -51,26 +51,35 @@ class SSPINTLMClient:
 	async def connect(self):
 		self.transport = await websockets.connect(self.server_url)
 		
-	async def authenticate(self, is_rpc = False):
+	async def authenticate(self, flags = None):
 		try:
 			ac = SSPINTLMAuthCmd()
 			ac.client_name = None
 			ac.cred_usage = '3'
+			if flags is not None:
+				ac.flags = str(flags)
 			await self.transport.send(json.dumps(ac.to_dict()))
 			data = await self.transport.recv()
 			rply = SSPIPluginCMD.from_dict(json.loads(data))
+			if rply.cmdtype == SSPICmdType.Winerror:
+				return None, rply.get_exception()
+				
 			return base64.b64decode(rply.authdata), None
 		except Exception as e:
 			return None, e
 		
-	async def challenge(self, challenge, is_rpc = False):
+	async def challenge(self, challenge, flags = None):
 		try:
 			ac = SSPINTLMChallengeCmd()
 			ac.cred_usage = '3'
+			if flags is not None:
+				ac.flags = str(flags)
 			ac.token = base64.b64encode(challenge).decode()
 			await self.transport.send(json.dumps(ac.to_dict()))
 			data = await self.transport.recv()
 			rply = SSPIPluginCMD.from_dict(json.loads(data))
+			if rply.cmdtype == SSPICmdType.Winerror:
+				return None, rply.get_exception()
 			return base64.b64decode(rply.authdata), None
 		
 		except Exception as e:
@@ -82,6 +91,8 @@ class SSPINTLMClient:
 			await self.transport.send(json.dumps(ac.to_dict()))
 			data = await self.transport.recv()
 			rply = SSPIPluginCMD.from_dict(json.loads(data))
+			if rply.cmdtype == SSPICmdType.Winerror:
+				return None, rply.get_exception()
 			return base64.b64decode(rply.session_key), None
 		except Exception as e:
 			return None, e
@@ -128,11 +139,11 @@ class LDAP3NTLMSSPI:
 		self.out_q = AsyncProcessQueue()
 		
 	def create_negotiate_message(self):
-		print('Connecting to %s' % self.password)
+		#print('Connecting to %s' % self.password)
 		self.aproc = LDAP3NTLMSSPIProcess(self.password, self.in_q, self.out_q)
 		self.aproc.start()
-		print('Connected!')
-		print('Getting auth data!')
+		#print('Connected!')
+		#print('Getting auth data!')
 		data, res = self.out_q.get()
 
 		return data
@@ -141,7 +152,7 @@ class LDAP3NTLMSSPI:
 		return self.authenticate_data
 		
 	def parse_challenge_message(self, autorize_data):
-		print('Getting authenticate data!')
+		#print('Getting authenticate data!')
 		self.in_q.put(autorize_data)
 		data, res = self.out_q.get()
 		self.authenticate_data = data

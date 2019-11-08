@@ -46,6 +46,9 @@ class WinError:
 		self.result = None
 		self.reason = None
 
+	def get_exception(self):
+		return Exception('SSPI WinError! Reason : %s' % self.reason)
+
 	@staticmethod
 	def from_cmd(cmd):
 		p = WinError()
@@ -87,6 +90,29 @@ class SSPIConnectCmd:
 		p = SSPIConnectCmd()
 		p.session_id = cmd.params[0]
 		return p
+		
+	def to_bytes(self):
+		cmd = SSPIPluginCMD()
+		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.session_id)
+		return cmd.to_bytes()
+
+class SSPITerminateCmd:
+	def __init__(self):
+		self.cmdtype = SSPICmdType.TERMINATED
+		self.session_id = None
+	
+	@staticmethod
+	def from_cmd(cmd):
+		p = SSPITerminateCmd()
+		p.session_id = cmd.params[0]
+		return p
+
+	def to_dict(self):
+		return {
+			'cmdtype' : self.cmdtype.value,
+			'session_id' : self.session_id ,
+		}
 		
 	def to_bytes(self):
 		cmd = SSPIPluginCMD()
@@ -594,7 +620,7 @@ class SSPIPluginCMD:
 
 type2obj = {
 	SSPICmdType.CONNECT : SSPIConnectCmd, 
-	SSPICmdType.TERMINATED : None, 
+	SSPICmdType.TERMINATED : SSPITerminateCmd, 
 	SSPICmdType.NTLM_AUTH : SSPINTLMAuthCmd, 
 	SSPICmdType.NTLM_AUTH_RPLY : SSPINTLMAuthRply,
 	SSPICmdType.NTLM_CHALLENGE : SSPINTLMChallengeCmd,

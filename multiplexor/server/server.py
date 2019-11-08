@@ -310,9 +310,9 @@ class MultiplexorServer:
 				
 			elif cmd.cmdtype == ServerCMDType.PLUGIN_DATA:
 				if not cmd.plugin_id in agent.plugins:
-					print('Got plugin data from %s for and unknown plugin id %s' % (agent.agent_id, cmd.plugin_id))
+					#print('Got plugin data from %s for and unknown plugin id %s' % (agent.agent_id, cmd.plugin_id))
 					continue
-				print('Dispatching plugin data!')
+				#print('Dispatching plugin data!')
 				await agent.plugins[cmd.plugin_id].plugin_in.put(cmd.plugin_data)
 				
 			#elif cmd.cmdtype == ServerCMDType.PLUGIN_START:
@@ -325,7 +325,7 @@ class MultiplexorServer:
 			
 			elif cmd.cmdtype == ServerCMDType.PLUGIN_STOPPED_EVT:
 				if not cmd.plugin_id in agent.plugins:
-					print('Got plugin data from %s for and unknown plugin id %s' % (agent.agent_id, cmd.plugin_id))
+					#print('Got plugin data from %s for and unknown plugin id %s' % (agent.agent_id, cmd.plugin_id))
 					continue
 				await agent.plugins[cmd.plugin_id].plugin_in.put(cmd)
 				await self.logger.info('Plugin stopped')

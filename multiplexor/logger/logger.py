@@ -10,12 +10,14 @@ class Logger:
 	"""
 	This class is used to provie a better logging experience for asyncio based classes/functions
 	Probably will replace logtask "solution" with this one in the future
+	sink: logging object to have unified logging
 	TODO
 	"""
-	def __init__(self, name, logQ = None, level = logging.DEBUG):
+	def __init__(self, name, logQ = None, level = logging.DEBUG, sink = None):
 		self.level = level
 		self.consumers = {}
 		self.name = name
+		self.sink = sink
 
 		self.is_final = True
 		if logQ:
@@ -23,6 +25,10 @@ class Logger:
 			self.is_final = False
 		else:
 			self.logQ = asyncio.Queue()
+
+	async def terminate(self):
+		#TODO: implement
+		return
 		
 	async def run(self):
 		"""
@@ -43,7 +49,11 @@ class Logger:
 			print('Logger run exception! %s' % e)
 			
 	async def handle_logger(self, msg):
-		print('%s %s %s %s' % (datetime.datetime.utcnow().isoformat(), self.name, msg.level, msg.msg))
+		if self.sink is None:
+			logging.log(msg.level, '%s %s %s' % (datetime.datetime.utcnow().isoformat(), self.name, msg.msg))
+		else:
+			self.sink.log(msg.level, '%s %s' % (self.name, msg.msg))
+		#print('%s %s %s %s' % (datetime.datetime.utcnow().isoformat(), self.name, msg.level, msg.msg))
 		
 	async def handle_consumers(self, msg):
 		try:

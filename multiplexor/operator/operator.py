@@ -18,10 +18,12 @@ class MultiplexorOperator:
 
 	Use this for managing the server, either via command line or programaticcally using the APIs this object exposes.
 	"""
-	def __init__(self, connection_string, logger = None, reconnect_tries = None):
+	def __init__(self, connection_string, logger = None, reconnect_tries = None, logging_sink = None, show_remote_logs = False):
 		self.connection_string = connection_string
 		self.connector = None
 		self.logger = logger
+		self.show_remote_logs = show_remote_logs
+		self.logging_sink = logging_sink
 		self.cmd_id_ctr = 0
 		self.reply_buffer = {} # cmd_id -> reply
 		self.reply_buffer_evt = {} #cmd_id -> event
@@ -32,18 +34,25 @@ class MultiplexorOperator:
 		self.disconnected_evt = None
 		self.reconnect_tries = reconnect_tries
 
+	async def start_logger(self):
+		if self.logger is None:
+			self.logger = Logger('MP Operator', sink = self.logging_sink)
+			asyncio.ensure_future(self.logger.run())
+
+
 	@mpexception
 	async def handle_incoming(self):
 		while True:
 			try:
 				reply = await self.connector.cmd_in_q.get()
-				print(reply.to_dict())
+				#print(reply.to_dict())
 				if reply.cmdtype in [OperatorCmdType.START_PLUGIN, OperatorCmdType.PLUGIN_STARTED_EVT, 
 										OperatorCmdType.PLUGIN_STOPPED_EVT, OperatorCmdType.LOG_EVT, 
 										OperatorCmdType.PLUGIN_DATA_EVT, OperatorCmdType.AGENT_CONNECTED_EVT,
 										OperatorCmdType.AGENT_DISCONNECTED_EVT]:
 					if reply.cmdtype == OperatorCmdType.LOG_EVT:
-						await self.logger.log(reply.level, reply.msg)
+						if self.show_remote_logs is True:
+							await self.logger.log(reply.level, reply.msg)
 						try:
 							asyncio.create_task(self.on_log(reply))
 						except Exception as e:
@@ -82,7 +91,7 @@ class MultiplexorOperator:
 			except Exception as e:
 				#at this point something bad happened, so we are cleaning up
 				#sending out the exception to all cmd ids and notifying them
-				print(str(e))
+				#print(str(e))
 				await self.logger.exception()
 				for reply_id in self.reply_buffer:
 					self.reply_buffer[reply_id] = e
@@ -97,7 +106,7 @@ class MultiplexorOperator:
 		# Checking if cmd id is already in the buffer, if not we wait for the incoming event
 		# then we take out the reply from the buffer, and delete the buffer entry and also the notification entry
 		#
-		print('recv_reply called with cmd_id of %s' % cmd_id)
+		#print('recv_reply called with cmd_id of %s' % cmd_id)
 		if cmd_id not in self.reply_buffer:
 			await self.reply_buffer_evt[cmd_id].wait()
 		reply = self.reply_buffer[cmd_id]
@@ -114,15 +123,13 @@ class MultiplexorOperator:
 		self.reply_buffer_evt[cmd.cmd_id] = asyncio.Event()
 		self.cmd_id_ctr += 1
 		await self.connector.cmd_out_q.put(cmd)
-		print('send_cmd called and reaturned %s' % cmd.cmd_id)
+		#print('send_cmd called and returned %s' % cmd.cmd_id)
 		return cmd.cmd_id
 
 	@mpexception
 	async def connect(self):
 		self.disconnected_evt = asyncio.Event()
-		if self.logger is None:
-			self.logger = Logger('Operator')
-			asyncio.ensure_future(self.logger.run())
+		await self.start_logger()
 
 		self.connector = MultiplexorOperatorConnector(self.connection_string, self.logger.logQ, ssl_ctx = None, reconnect_interval = 5, reconnect_tries=self.reconnect_tries)
 		self.connector_task = asyncio.create_task(self.connector.run())
@@ -136,9 +143,7 @@ class MultiplexorOperator:
 
 	@mpexception
 	async def listen(self):
-		if self.logger is None:
-			self.logger = Logger('Operator')
-			asyncio.ensure_future(self.logger.run())
+		await self.start_logger()
 
 		if self.connection_string.find(':') != -1:
 			listen_ip, listen_port = self.connection_string.split(':')

@@ -3,9 +3,8 @@ from multiplexor.logger.logger import *
 from multiplexor.server.protocol.protocol import *
 
 class Packetizer:
-	def __init__(self, logQ, cancellation_evt):
+	def __init__(self, logQ):
 		self.logger = Logger('Packetizer', logQ = logQ)
-		self.transport_terminated_evt = cancellation_evt
 		self.packetizer_in = asyncio.Queue()
 		self.packetizer_out = asyncio.Queue()
 		self.multiplexor_in = asyncio.Queue()
@@ -13,13 +12,26 @@ class Packetizer:
 		self.recv_buffer = b''
 		self.next_cmd_length = -1
 		self.send_buffer = b''
+
+		self.send_loop_task = None
+		self.recv_loop_task = None
 		
 		
 		self.max_packet_size = 5*1024
+
+	@mpexception
+	async def terminate(self):
+		if self.send_loop_task is not None:
+			self.send_loop_task.cancel()
+		if self.recv_loop_task is not None:
+			self.recv_loop_task.cancel()
+		
+		if self.logger is not None:
+			await self.logger.terminate()
 		
 	@mpexception
 	async def recv_loop(self):
-		while not self.transport_terminated_evt.is_set():
+		while True:
 			#print('Waiting for incoming dat from transport...')
 			data = await self.packetizer_in.get()
 			#print('Data in: %s' % data)
@@ -47,14 +59,14 @@ class Packetizer:
 	
 	@mpexception	
 	async def send_loop(self):
-		while not self.transport_terminated_evt.is_set():
+		while True:
 			cmd = await self.multiplexor_out.get()		
 			await self.logger.debug("Sending command: %s" % cmd)
 			data = cmd.to_bytes()
 			self.send_buffer += len(data).to_bytes(4, 'big', signed = False) + data
 			
 			if len(self.send_buffer) > self.max_packet_size:
-				while not self.transport_terminated_evt.is_set() and len(self.send_buffer) > self.max_packet_size:
+				while len(self.send_buffer) > self.max_packet_size:
 					await self.packetizer_out.put(self.send_buffer[:self.max_packet_size])
 					self.send_buffer = self.send_buffer[self.max_packet_size:]
 					await asyncio.sleep(0)
@@ -66,5 +78,5 @@ class Packetizer:
 					
 	@mpexception	
 	async def run(self):
-		asyncio.ensure_future(self.recv_loop())
-		asyncio.ensure_future(self.send_loop())
+		self.send_loop_task = asyncio.create_task(self.send_loop())
+		self.recv_loop_task = asyncio.create_task(self.recv_loop())
