@@ -54,10 +54,10 @@ class SSPIAuth:
 		await self.ws.send(json.dumps(ac.to_dict()))
 		data = await self.ws.recv()
 		rply = SSPIPluginCMD.from_dict(json.loads(data))
-		print(rply.authdata)
+		#print(rply.authdata)
 		
 		token = InitialContextToken.load(base64.b64decode(rply.authdata))
-		print(token.native['innerContextToken'])
+		#print(token.native['innerContextToken'])
 		
 		
 		
@@ -68,7 +68,7 @@ class SSPIAuth:
 		await self.ws.send(json.dumps(ac.to_dict()))
 		data = await self.ws.recv()
 		rply = SSPIPluginCMD.from_dict(json.loads(data))
-		print(rply.authdata)
+		#print(rply.authdata)
 		
 		status, challenge, t = ntlm_handler.do_AUTH(base64.b64decode(rply.authdata))
 
@@ -78,11 +78,11 @@ class SSPIAuth:
 		await self.ws.send(json.dumps(ac.to_dict()))
 		data = await self.ws.recv()
 		rply = SSPIPluginCMD.from_dict(json.loads(data))
-		print(rply.authdata)
+		#print(rply.authdata)
 		
 		status, challenge, creds = ntlm_handler.do_AUTH(base64.b64decode(rply.authdata))
-		for cred in creds:
-			print(str(cred.to_credential()))
+		#for cred in creds:
+		#	print(str(cred.to_credential()))
 		
 		
 		

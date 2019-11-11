@@ -292,32 +292,26 @@ async def main_loop(args):
 	if args.command == 'server':
 		if args.cmd == 'list':
 			reply = await mgr.list_agents()
-			print(reply)
 
 	elif args.command == 'agent':
 		if args.cmd == 'info':
 			reply = await mgr.info_agent(args.agentid)
-			print(reply)
 			
 		elif args.cmd == 'list':
 			reply = await mgr.list_agent_plugins(args.agentid)
-			print(reply)
 			
 	elif args.command == 'plugin':
 		if args.cmd == 'info':
 			reply = await mgr.info_plugin(args.agentid, args.pluginid)
-			print(reply)
 			
 			
 	elif args.command == 'create':
 		if args.type == 'socks5':
 			reply = await mgr.start_socks5(args.agentid, args.listen_ip, args.listen_port, args.remote)
-			print(reply)
 			
 			
 		elif args.type == 'sspi':
 			reply = await mgr.start_socks5(args.agentid, args.listen_ip, args.listen_port, args.remote)
-			print(reply)
 	
 	await mgr.terminate()
 

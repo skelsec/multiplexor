@@ -68,8 +68,10 @@ class Operator:
 				t.agent_id = logmsg.agent_id
 
 				await self.websocket.send(json.dumps(t.to_dict()))
+			except websockets.exceptions.ConnectionClosedError:
+				return
 			except Exception as e:
-				await self.logger.error(str(e))
+				await self.logger.exception()
 
 class OperatorHandler:
 	"""
@@ -99,10 +101,7 @@ class OperatorHandler:
 		
 	@mpexception
 	async def run(self):
-		try:
-			await self.logger.debug('Serving..')
-			server = await websockets.serve(self.handle_operator, self.listen_ip, self.listen_port, ssl=self.sslctx)
-			await server.wait_closed()
-			self.transport_terminated_evt.set()
-		except Exception as e:
-			print(e)
+		await self.logger.debug('Serving..')
+		server = await websockets.serve(self.handle_operator, self.listen_ip, self.listen_port, ssl=self.sslctx)
+		await server.wait_closed()
+		self.transport_terminated_evt.set()

@@ -70,16 +70,17 @@ class SSPIOperator:
 				await self.terminate()
 				return
 
-			print(data)
+			#print(data)
 			cmd = SSPIPluginCMD.from_dict(json.loads(data))
 			cmd.session_id = self.session_id
-			print(cmd.cmdtype)
+			#print(cmd.cmdtype)
 			#sending command to remote plugin session
 			await self.agent_out.put(cmd.to_bytes())
 			
 			reply = await self.agent_in.get()
-			await self.logger.debug('Got reply!')		
-			print(reply.to_dict())
+			
+			#await self.logger.debug('Got reply!')		
+			#print(reply.to_dict())
 			
 			try:
 				await self.operator_websocket.send(json.dumps(reply.to_dict()))
@@ -104,12 +105,11 @@ class MultiplexorSSPI(MultiplexorPluginBase):
 	
 	@mpexception		
 	async def terminate(self):
-		print('MultiplexorSSPI terminate called!')
+		await self.logger.debug('MultiplexorSSPI terminate called!')
 		for session_id in self.dispatch_table:
 			await self.dispatch_table[session_id].terminate()
 		
 		if self.server is not None:
-			print(self.server)
 			self.server.close()
 		return
 	
@@ -125,11 +125,11 @@ class MultiplexorSSPI(MultiplexorPluginBase):
 				return
 			#print('Got plugin data!')
 			cmd = SSPIPluginCMD.from_bytes(data)
-			print('SSPI Plugin data in from remote agent SSPI: %s' % str(cmd))
+			#print('SSPI Plugin data in from remote agent SSPI: %s' % str(cmd))
 			
 			await self.dispatch_table[cmd.session_id].agent_in.put(cmd)
 		
-		print('handle_plugin_data_in exiting!')
+		await self.logger.debug('handle_plugin_data_in exiting!')
 		
 	@mpexception
 	async def handle_client(self, operator_websocket, path):
@@ -154,12 +154,12 @@ class MultiplexorSSPI(MultiplexorPluginBase):
 			
 	async def setup(self):
 		self.plugin_info = WinAPIPluginInfo()
-		if self.plugin_params:
-			print(self.plugin_params)
-			#if self.plugin_params['listen_ip'] and self.plugin_params['listen_ip'].upper() != 'NONE':
-			#	listen_ip = self.plugin_params['listen_ip']
-			#if self.plugin_params['listen_port'] and self.plugin_params['listen_port'].upper() != 'NONE':
-			#	listen_port = int(self.plugin_params['listen_port'])
+		#if self.plugin_params:
+		#	#print(self.plugin_params)
+		#	#if self.plugin_params['listen_ip'] and self.plugin_params['listen_ip'].upper() != 'NONE':
+		#	#	listen_ip = self.plugin_params['listen_ip']
+		#	#if self.plugin_params['listen_port'] and self.plugin_params['listen_port'].upper() != 'NONE':
+		#	#	listen_port = int(self.plugin_params['listen_port'])
 				
 		self.server = await websockets.serve(self.handle_client, '127.0.0.1', 0, ssl=None)
 		

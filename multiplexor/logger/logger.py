@@ -13,11 +13,12 @@ class Logger:
 	sink: logging object to have unified logging
 	TODO
 	"""
-	def __init__(self, name, logQ = None, level = logging.DEBUG, sink = None):
-		self.level = level
+	def __init__(self, name, logQ = None, sink = None):
 		self.consumers = {}
 		self.name = name
 		self.sink = sink
+		self.is_running = False
+		self.logging = logging #.getLogger('__multiplexor__.' + self.name )
 
 		self.is_final = True
 		if logQ:
@@ -38,6 +39,7 @@ class Logger:
 		if self.is_final == False:
 			return
 		try:
+			self.is_running = True
 			while True:
 				logmsg = await self.logQ.get()
 				await self.handle_logger(logmsg)
@@ -50,10 +52,9 @@ class Logger:
 			
 	async def handle_logger(self, msg):
 		if self.sink is None:
-			logging.log(msg.level, '%s %s %s' % (datetime.datetime.utcnow().isoformat(), self.name, msg.msg))
+			self.logging.log(msg.level, '%s %s %s' % (datetime.datetime.utcnow().isoformat(), self.name, msg.msg))
 		else:
 			self.sink.log(msg.level, '%s %s' % (self.name, msg.msg))
-		#print('%s %s %s %s' % (datetime.datetime.utcnow().isoformat(), self.name, msg.level, msg.msg))
 		
 	async def handle_consumers(self, msg):
 		try:

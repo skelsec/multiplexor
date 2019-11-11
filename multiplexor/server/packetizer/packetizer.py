@@ -52,7 +52,7 @@ class Packetizer:
 			#print(self.recv_buffer[: self.next_cmd_length + 4])
 			self.recv_buffer = self.recv_buffer[self.next_cmd_length + 4:]
 			self.next_cmd_length = -1
-			await self.logger.debug("Recieved reply: %s" % cmd)
+			#await self.logger.debug("Recieved reply: %s" % cmd)
 			await self.multiplexor_in.put(cmd)
 			await asyncio.sleep(0)
 			await self.process_recv_buffer()
@@ -61,7 +61,7 @@ class Packetizer:
 	async def send_loop(self):
 		while True:
 			cmd = await self.multiplexor_out.get()		
-			await self.logger.debug("Sending command: %s" % cmd)
+			#await self.logger.debug("Sending command: %s" % cmd)
 			data = cmd.to_bytes()
 			self.send_buffer += len(data).to_bytes(4, 'big', signed = False) + data
 			

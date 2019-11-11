@@ -59,5 +59,4 @@ if __name__ == '__main__':
 	for cred in creds:
 		print(str(cred.to_credential()))
 	
-	print()
 	

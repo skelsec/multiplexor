@@ -38,7 +38,7 @@ class MultiplexorServer:
 	##################################################################################################
 	
 	def add_transport(self, transport):
-		print('adding transport')
+		#print('adding transport')
 		transport.agent_dispatch_queue = self.agent_dispatch_queue
 		self.transports.append(transport)
 		asyncio.ensure_future(transport.run())
@@ -50,7 +50,7 @@ class MultiplexorServer:
 		while operator.websocket.open:
 			op_cmd = await operator.multiplexor_cmd_in.get()
 			if not op_cmd:
-				print('queue broken!')
+				await self.logger.debug('queue broken!')
 				return
 			await self.logger.debug('Operator sent this: %s' % op_cmd)
 			if op_cmd.cmdtype == OperatorCmdType.LIST_AGENTS:
@@ -172,7 +172,6 @@ class MultiplexorServer:
 		return
 	
 	def add_ophandler(self, ophandler):
-		print('adding ophandler')
 		ophandler.operator_dispatch_queue = self.operator_dispatch_queue
 		self.ophandlers[ophandler] = 0
 		asyncio.ensure_future(self.handle_operator_event(ophandler))
@@ -242,7 +241,7 @@ class MultiplexorServer:
 	@mpexception
 	async def start_plugin(self, operator, agent, cmd): #plugin_type, plugin_params
 		await self.logger.debug('start_plugin called')
-		print(str(cmd))
+		#print(str(cmd))
 		pp = None #plugin parameters object or none
 		if cmd.server['remote'] == True:
 			#inserting the operator and the agent_id parameter into the startup params
@@ -290,6 +289,8 @@ class MultiplexorServer:
 	
 	@mpexception
 	async def handle_agent_main(self, agent):
+		print('New agent connected!')
+		await self.logger.info('New agent connected!')
 		#this msut be invoked after succsessful registration!
 
 		#notifying operators about new agent
@@ -305,8 +306,18 @@ class MultiplexorServer:
 			
 			if cmd.cmdtype == ServerCMDType.GET_INFO:
 				await self.logger.debug(cmd.agent_info)
-				#print(cmd.agent_id)
-				agent.info = cmd.agent_info
+				try:
+					#print(cmd.agent_info)
+					agent.info = json.loads(cmd.agent_info)
+					rply = OperatorAgentConnectedEvt()
+					rply.agent_id = agent.agent_id
+					rply.agentinfo = agent.info
+					rply.cmd_id = '66666'
+					for k in self.operators:
+						await self.operators[k].multiplexor_cmd_out.put(rply)
+				except Exception as e:
+					await self.logger.exception()
+				
 				
 			elif cmd.cmdtype == ServerCMDType.PLUGIN_DATA:
 				if not cmd.plugin_id in agent.plugins:
@@ -340,7 +351,7 @@ class MultiplexorServer:
 				await self.logger.info('Got plugin started event!')
 				#### Sanity check
 				if not cmd.plugin_id in agent.plugins:
-					print('Got plugin data from %s for and unknown plugin id %s' % (agent.agent_id, cmd.plugin_id))
+					await self.logger.debug('Got plugin data from %s for and unknown plugin id %s' % (agent.agent_id, cmd.plugin_id))
 					continue
 				#### dispatching th event to the appropriate queue
 				#### await agent.plugins[cmd.plugin_id].plugin_in.put(cmd)
@@ -391,7 +402,7 @@ class MultiplexorServer:
 			await self.handle_agent_main(agent)
 			await self.logger.debug('Agent dropped :(')
 		else:
-			print('Agent failed to register, let it go let it go...')
+			await self.logger.debug('Agent failed to register, let it go let it go...')
 			return
 	
 	@mpexception

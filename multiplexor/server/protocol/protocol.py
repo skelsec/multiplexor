@@ -26,7 +26,6 @@ class MultiplexorGetInfo:
 		
 	@staticmethod
 	def from_cmd(cmd):
-		print(str(cmd))
 		p = MultiplexorGetInfo()
 		p.agent_id = cmd.params[0].decode()
 		p.agent_info = cmd.params[1].decode()
@@ -49,7 +48,6 @@ class MultiplexorRegister:
 		
 	@staticmethod
 	def from_cmd(cmd):
-		print(str(cmd))
 		p = MultiplexorRegister()
 		if len(cmd.params) != 0:
 			p.secret = cmd.params[0]

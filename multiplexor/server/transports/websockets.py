@@ -37,7 +37,6 @@ class WebsocketsTransportServer:
 		await agent.wait_closed()
 		await self.logger.info('Agent disconnected! %s:%s' % (remote_ip, remote_port))
 		await self.agent_dispatch_queue.put((agent, 'DISCONNECTED'))
-		print('DISCONNECTED!')
 		
 	@mpexception
 	async def run(self):

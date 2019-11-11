@@ -329,7 +329,6 @@ class MultiplexorSocks5(MultiplexorPluginBase):
 		listen_port = 0
 		
 		if self.plugin_params:
-			print(self.plugin_params)
 			if self.plugin_params['listen_ip'] and self.plugin_params['listen_ip'].upper() != 'NONE':
 				listen_ip = self.plugin_params['listen_ip']
 			if self.plugin_params['listen_port'] and self.plugin_params['listen_port'].upper() != 'NONE':

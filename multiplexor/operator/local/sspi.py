@@ -48,7 +48,7 @@ class MultiplexorSSPIOperator:
 				
 			elif rply.cmdtype == OperatorCmdType.PLUGIN_DATA_EVT:
 				cmd = SSPIPluginCMD.from_bytes(bytes.fromhex(rply.data))
-				print(str(cmd))
+				#print(str(cmd))
 				
 				if cmd.cmdtype == SSPICmdType.TERMINATED:
 					#plugin crashed on the remote end :(
@@ -56,8 +56,7 @@ class MultiplexorSSPIOperator:
 				
 				else:
 					await self.dispatch_table[cmd.session_id].remote_in.put(cmd)
-		
-		print('handle_plugin_data_in exiting!')
+		await self.logger.info('handle_plugin_data_in exiting!')
 		
 	@mpexception
 	async def handle_plugin_out(self, plugin_out_q):
@@ -114,7 +113,6 @@ class MultiplexorSSPIOperator:
 		await self.start_sspi_plugin()
 
 		self.server = await websockets.serve(self.handle_client, self.sspi_listen_ip, self.sspi_listen_port, ssl=None)
-		print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! %s' % self.server) 
 		#self.server = await asyncio.start_server(self.handle_socks_client, self.socks5_listen_ip, self.socks5_listen_port)
 		listen_ip, listen_port = self.server.sockets[0].getsockname()
 		await self.logger.info('Local SSPI server listening on %s:%s' % (listen_ip, listen_port))
