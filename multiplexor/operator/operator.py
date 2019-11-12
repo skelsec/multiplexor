@@ -136,9 +136,11 @@ class MultiplexorOperator:
 		try:
 			await asyncio.wait_for(self.connector.server_connected.wait(), timeout = 1) #waiting until connector managed to connect to the multiplexor server
 		except asyncio.TimeoutError:
+			asyncio.create_task(self.on_server_error('Server failed to connect!'))
 			await self.terminate()
 			raise Exception('Server failed to connect!')
-			
+		
+		asyncio.create_task(self.on_server_connected(self.connection_string))
 		self.incoming_task = asyncio.create_task(self.handle_incoming())
 
 	@mpexception
@@ -278,6 +280,12 @@ class MultiplexorOperator:
 		pass
 	
 	async def on_log(self, log):
+		pass
+
+	async def on_server_connected(self, connection_string):
+		pass
+
+	async def on_server_error(self, reason):
 		pass
 
 async def main_loop(args):

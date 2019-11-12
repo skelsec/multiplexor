@@ -5,7 +5,7 @@ setup(
 	name="multiplexor",
 
 	# Version number (initial):
-	version="0.0.2",
+	version="0.0.3",
 
 	# Application author details:
 	author="Tamas Jos",
@@ -28,15 +28,18 @@ setup(
 
 	# long_description=open("README.txt").read(),
 	python_requires='>=3.7',
-	#install_requires=[
-	#	'minikerberos>=0.0.10',
-	#	'winsspi>=0.0.2',
-	#	'six',
-	#],
+	install_requires=[
+		'websockets',
+	],
+
+	entry_points={
+		'console_scripts': [
+			'multiplexor = multiplexor.__main__:main',
+		],
+	},
 	
 	classifiers=(
 		"Programming Language :: Python :: 3.7",
-		"License :: OSI Approved :: MIT License",
 		"Operating System :: OS Independent",
 	),
 )

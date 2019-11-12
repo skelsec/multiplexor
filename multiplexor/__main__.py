@@ -18,11 +18,22 @@ multiplexor_logconfig = {
 		'websockets': {
 			'level': 'INFO',
 		},
-		'multiplexor': {
+		'multiplexor_server': {
 			'level': 'DEBUG',
 		}
 	}
 }
+
+async def startup(operator_listen_ip, operator_listen_port, listen_ip, listen_port):
+	logger = Logger('multiplexor_server')
+	ophandler = OperatorHandler(operator_listen_ip, operator_listen_port, logger.logQ)
+	transport = WebsocketsTransportServer(listen_ip, listen_port, logger.logQ)
+	
+	mpserver = MultiplexorServer(logger)
+	mpserver.add_transport(transport)
+	mpserver.add_ophandler(ophandler)
+
+	await mpserver.run()
 
 def main():
 	parser = argparse.ArgumentParser(description='multiplexor server startup script')
@@ -33,7 +44,7 @@ def main():
 	parser.add_argument('--operator-listen-ip', default = '127.0.0.1', help='Accept remote agent connections on a spcific IP address. Default: 127.0.0.1')
 	parser.add_argument('--operator-listen-port', type = int, default = 9999, help='Accept remote agent connections on a spcific port. Default: 9999')
 	
-	parser.add_argument('-l', '--log-config-file', help='File for log configuration. Dictconfig encoded with json.')
+	parser.add_argument('-l', '--log-config-file', help='File for log configuration. Dictconfig encoded with json. Overrides verbosity!')
 	
 	args = parser.parse_args()
 	
@@ -47,19 +58,19 @@ def main():
 			logconf = json.load(f)
 	else:
 		logconf = multiplexor_logconfig
+		if args.verbose == 1:
+			logconf['loggers'][''] = 'DEBUG'
+			logconf['loggers']['multiplexor_server'] = 'DEBUG'
+			logconf['loggers']['websockets'] = 'DEBUG'
+		elif args.verbose == 2:
+			logconf['loggers'][''] = 1
+			logconf['loggers']['multiplexor_server'] = 'DEBUG'
+			logconf['loggers']['websockets'] = 1
+
 	logging.config.dictConfig(logconf)
 	
-	logger = Logger('multiplexor')
-
-	op = OperatorHandler(operator_listen_ip, operator_listen_port, logger.logQ)
-	transport = WebsocketsTransportServer(listen_ip, listen_port, logger.logQ)
+	asyncio.run(startup(operator_listen_ip, operator_listen_port, listen_ip, listen_port))
 	
-	s = MultiplexorServer(logger)
-	s.add_transport(transport)
-	s.add_ophandler(op)
-	
-	loop = asyncio.get_event_loop()
-	loop.run_until_complete(s.run())
 
 if __name__ == '__main__':
 	main()

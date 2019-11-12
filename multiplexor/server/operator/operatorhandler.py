@@ -85,7 +85,7 @@ class OperatorHandler:
 		self.transport_terminated_evt = asyncio.Event()
 		
 		self.operator_dispatch_queue = None		
-		self.logger = Logger('OperatorHandler', logQ = logQ)
+		self.logger = Logger('multiplexor.operatorhandler', logQ = logQ)
 		
 	
 	@mpexception

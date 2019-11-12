@@ -1,0 +1,15 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "loggers": {
+        "": {
+            "level": "DEBUG"
+        },
+        "websockets": {
+            "level": "INFO"
+        },
+        "multiplexor": {
+            "level": "DEBUG"
+        }
+    }
+}

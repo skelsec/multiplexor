@@ -42,10 +42,13 @@ class MultiplexorOperatorConnector:
 		if self.out_task:
 			self.out_task.cancel()
 		if self.current_ws:
-			#this is ugly, I know BUT official way takes FOREVER to close...
-			self.current_ws.writer._transport.abort()
-			#await self.current_ws.close()
-
+			try:
+				#this is ugly, I know BUT official way takes FOREVER to close...
+				self.current_ws.writer._transport.abort()
+				#await self.current_ws.close()
+			except:
+				pass
+			
 		self.in_task = None
 		self.out_task = None
 		self.current_ws = None

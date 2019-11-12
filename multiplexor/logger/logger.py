@@ -38,6 +38,8 @@ class Logger:
 		"""
 		if self.is_final == False:
 			return
+		if self.is_running == True:
+			return
 		try:
 			self.is_running = True
 			while True:
