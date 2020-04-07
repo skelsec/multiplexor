@@ -28,6 +28,7 @@ class Logger:
 			self.logQ = asyncio.Queue()
 
 	async def terminate(self):
+		print('terminate called!')
 		#TODO: implement
 		return
 		

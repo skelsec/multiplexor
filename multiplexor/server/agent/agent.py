@@ -40,6 +40,8 @@ class MultiplexorAgent:
 		"""
 		while True:
 			data = await self.packetizer.packetizer_out.get()
+			# uncomment this for print of outgoing data
+			#print('handle_packetizer_send %s' % data)
 			try:
 				await self.transport.send(data)
 			except Exception as e:
@@ -55,6 +57,8 @@ class MultiplexorAgent:
 		while True:
 			try:
 				data = await self.transport.recv()
+				# uncomment this for print of incoming data
+				#print('handle_packetizer_recv' % data)
 			except asyncio.CancelledError:
 				return
 

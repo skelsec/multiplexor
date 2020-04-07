@@ -21,6 +21,8 @@ class SSPICmdType(enum.Enum):
 	Winerror = 12
 	GET_SESSIONKEY = 13
 	GET_SESSIONKEY_RPLY = 14
+	GET_SEQUENCENO = 15
+	GET_SEQUENCENO_RPLY = 16
         
 	
 def eon(x):
@@ -378,75 +380,6 @@ class SSPINTLMChallengeRply:
 		cmd.params.append(self.authdata)
 		return cmd.to_bytes()
 		
-class SSPIInitializeSecurityContextCmd:
-	def __init__(self):
-		self.cmdtype = SSPICmdType.SSPIInitializeSecurityContextCmd
-		self.session_id = None
-		self.creds = None
-		self.target = None
-		self.ctx  = None
-		self.flags  = None
-		self.TargetDataRep  = None
-		self.token  = None
-	
-	@staticmethod
-	def from_cmd(cmd):
-		p = SSPIInitializeSecurityContextCmd()
-		p.session_id = cmd.params[0]
-		p.creds = cmd.params[1]
-		p.target = cmd.params[2]
-		p.ctx = cmd.params[3]
-		p.flags = cmd.params[4]
-		p.TargetDataRep = cmd.params[5]
-		p.token = cmd.params[6]
-		return p
-		
-	def to_bytes(self):
-		cmd = SSPIPluginCMD()
-		cmd.cmdtype = self.cmdtype
-		cmd.params.append(self.session_id)
-		cmd.params.append(self.creds)
-		cmd.params.append(self.target)
-		cmd.params.append(self.ctx)
-		cmd.params.append(self.flags)
-		cmd.params.append(self.TargetDataRep)
-		cmd.params.append(self.token)
-		return cmd.to_bytes()
-		
-class SSPIInitializeSecurityContextRply:
-	def __init__(self):
-		self.cmdtype = SSPICmdType.InitializeSecurityContextRply
-		self.session_id = None
-		self.res = None
-		self.ctx = None
-		self.data  = None
-		self.outputflags  = None
-		self.expiry  = None
-	
-	@staticmethod
-	def from_cmd(cmd):
-		p = SSPIInitializeSecurityContextRply()
-		p.session_id = cmd.params[0]
-		p.res = cmd.params[1]
-		p.ctx = cmd.params[2]
-		p.data = cmd.params[3]
-		p.flags = cmd.params[4]
-		p.outputflags = cmd.params[5]
-		p.expiry = cmd.params[6]
-		return p
-		
-	def to_bytes(self):
-		cmd = SSPIPluginCMD()
-		cmd.cmdtype = self.cmdtype
-		cmd.params.append(self.session_id)
-		cmd.params.append(self.res)
-		cmd.params.append(self.ctx)
-		cmd.params.append(self.data)
-		cmd.params.append(self.flags)
-		cmd.params.append(self.outputflags)
-		cmd.params.append(self.expiry)
-		return cmd.to_bytes()
-		
 class SSPIDecryptMessageCmd:
 	def __init__(self):
 		self.cmdtype = SSPICmdType.DecryptMessage
@@ -558,6 +491,74 @@ class SSPIGetSessionKeyRply:
 		cmd.params.append(self.result)
 		cmd.params.append(self.session_key)
 		return cmd.to_bytes()
+
+
+
+class SSPIGetSequenceNoCmd:
+	def __init__(self):
+		self.cmdtype = SSPICmdType.GET_SEQUENCENO
+		self.session_id = None
+
+	def to_dict(self):
+		return {
+			'cmdtype' : self.cmdtype.value,
+		}
+	
+	@staticmethod
+	def from_dict(d):
+		c = SSPIGetSequenceNoCmd()
+		return c
+		
+	def to_bytes(self):
+		cmd = SSPIPluginCMD()
+		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.session_id)
+		return cmd.to_bytes()
+		
+	@staticmethod
+	def from_cmd(cmd):
+		p = SSPIGetSequenceNoCmd()
+		p.session_id = cmd.params[0]
+		return p
+
+class SSPIGetSequenceNoRply:
+	def __init__(self):
+		self.cmdtype = SSPICmdType.GET_SEQUENCENO_RPLY
+		self.session_id = None
+		self.result = None
+		self.seq_number = None
+	
+	@staticmethod
+	def from_cmd(cmd):
+		p = SSPIGetSequenceNoRply()
+		p.session_id = cmd.params[0]
+		p.result = cmd.params[1]
+		p.seq_number = cmd.params[2]
+
+		return p
+
+	def to_dict(self):
+		return {
+			'cmdtype' : self.cmdtype.value,
+			'result' : self.result ,
+			'seq_number' : self.seq_number ,	
+		}
+
+	@staticmethod
+	def from_dict(d):
+		c = SSPIGetSequenceNoRply()
+		c.result = d['result']
+		c.seq_number = d['seq_number']
+		
+		return c
+
+	def to_bytes(self):
+		cmd = SSPIPluginCMD()
+		cmd.cmdtype = self.cmdtype
+		cmd.params.append(self.session_id)
+		cmd.params.append(self.result)
+		cmd.params.append(self.seq_number)
+		return cmd.to_bytes()
 	
 class SSPIPluginCMD:
 	def __init__(self):
@@ -634,5 +635,7 @@ type2obj = {
 	SSPICmdType.Winerror : WinError,
 	SSPICmdType.GET_SESSIONKEY : SSPIGetSessionKeyCmd,
 	SSPICmdType.GET_SESSIONKEY_RPLY : SSPIGetSessionKeyRply,
+	SSPICmdType.GET_SEQUENCENO : SSPIGetSequenceNoCmd,
+	SSPICmdType.GET_SEQUENCENO_RPLY : SSPIGetSequenceNoRply,
 	
 }

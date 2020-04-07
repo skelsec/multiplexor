@@ -33,11 +33,12 @@ class MultiplexorOperator:
 		self.incoming_task = None
 		self.disconnected_evt = None
 		self.reconnect_tries = reconnect_tries
+		self.logger_task = None
 
 	async def start_logger(self):
 		if self.logger is None:
 			self.logger = Logger('MP Operator', sink = self.logging_sink)
-			asyncio.ensure_future(self.logger.run())
+			self.logger_task = asyncio.create_task(self.logger.run())
 
 
 	@mpexception
@@ -45,7 +46,8 @@ class MultiplexorOperator:
 		while True:
 			try:
 				reply = await self.connector.cmd_in_q.get()
-				#print(reply.to_dict())
+				# enable line below for command debug
+				#print('handle_incoming %s' % reply.to_dict())
 				if reply.cmdtype in [OperatorCmdType.START_PLUGIN, OperatorCmdType.PLUGIN_STARTED_EVT, 
 										OperatorCmdType.PLUGIN_STOPPED_EVT, OperatorCmdType.LOG_EVT, 
 										OperatorCmdType.PLUGIN_DATA_EVT, OperatorCmdType.AGENT_CONNECTED_EVT,
@@ -92,7 +94,8 @@ class MultiplexorOperator:
 				#at this point something bad happened, so we are cleaning up
 				#sending out the exception to all cmd ids and notifying them
 				#print(str(e))
-				await self.logger.exception()
+				if not isinstance(e, asyncio.CancelledError):
+					await self.logger.exception()
 				for reply_id in self.reply_buffer:
 					self.reply_buffer[reply_id] = e
 				for reply_id in self.reply_buffer_evt:
@@ -122,6 +125,8 @@ class MultiplexorOperator:
 		cmd.cmd_id = self.cmd_id_ctr
 		self.reply_buffer_evt[cmd.cmd_id] = asyncio.Event()
 		self.cmd_id_ctr += 1
+		# enable line below for outgoing command debug
+		#print('send_cmd: %s' % cmd)
 		await self.connector.cmd_out_q.put(cmd)
 		#print('send_cmd called and returned %s' % cmd.cmd_id)
 		return cmd.cmd_id
@@ -157,12 +162,16 @@ class MultiplexorOperator:
 		self.incoming_task = asyncio.create_task(self.handle_incoming())
 
 	async def terminate(self):
+		await self.logger.debug('terminate called!')
 		if self.incoming_task:
 			self.incoming_task.cancel()
 		if self.connector:
 			await self.connector.terminate()
 		if self.connector_task:
 			self.connector_task.cancel()
+
+		if self.logger_task:
+			self.logger_task.cancel()
 		self.connector_task = None
 
 		self.connector = None

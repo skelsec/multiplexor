@@ -7,6 +7,7 @@ from multiplexor.server.transports.websockets import WebsocketsTransportServer
 from multiplexor.server.operator.operatorhandler import OperatorHandler
 from multiplexor.server.server import MultiplexorServer
 from multiplexor.logger.logger import Logger
+from multiplexor._version import __banner__
 
 multiplexor_logconfig = {
 	'version': 1,
@@ -33,6 +34,11 @@ async def startup(operator_listen_ip, operator_listen_port, listen_ip, listen_po
 	mpserver.add_transport(transport)
 	mpserver.add_ophandler(ophandler)
 
+	print(__banner__)
+	print('[+] Running config:')
+	print('[+] Agent service listening on    : %s:%s' % (listen_ip, listen_port))
+	print('[+] Operator service listening on : %s:%s' % (operator_listen_ip, operator_listen_port))
+	print('[+] Starting server...')
 	await mpserver.run()
 
 def main():

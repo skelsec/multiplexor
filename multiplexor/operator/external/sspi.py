@@ -43,6 +43,16 @@ class KerberosSSPIClient:
 		except Exception as e:
 			return None, e
 
+	async def get_seq_number(self):
+		try:
+			ac = SSPIGetSequenceNoCmd()
+			await self.transport.send(json.dumps(ac.to_dict()))
+			data = await self.transport.recv()
+			rply = SSPIPluginCMD.from_dict(json.loads(data))
+			return base64.b64decode(rply.seq_number), None
+		except Exception as e:
+			return None, e
+
 class SSPINTLMClient:
 	def __init__(self, url):
 		self.server_url = url

@@ -307,7 +307,7 @@ class MultiplexorServer:
 			if cmd.cmdtype == ServerCMDType.GET_INFO:
 				await self.logger.debug(cmd.agent_info)
 				try:
-					#print(cmd.agent_info)
+					print(cmd.agent_info)
 					agent.info = json.loads(cmd.agent_info)
 					rply = OperatorAgentConnectedEvt()
 					rply.agent_id = agent.agent_id
@@ -384,13 +384,16 @@ class MultiplexorServer:
 		await agent.terminate()
 		self.agent_tasks[agent].cancel()
 		del self.agent_tasks[agent]
-		del self.agents[agent.agent_id]
-	
+		try:
+			del self.agents[agent.agent_id]
+		except Exception as e:
+			await self.logger.debug('Failed to remove agent from agents list! Reason: %s' % e)
 	@mpexception
 	async def handle_agent(self, agent):
 		#agent needs to register before we talk to her...
 		await self.register_agent(agent)
 		if agent.status == AgentStatus.REGISTERED:
+			logging.info(agent.agent_id)
 			
 			#by default we poll some basic info on the client...
 			if not agent.info:

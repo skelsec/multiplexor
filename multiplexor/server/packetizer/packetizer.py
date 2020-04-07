@@ -32,12 +32,15 @@ class Packetizer:
 	@mpexception
 	async def recv_loop(self):
 		while True:
-			#print('Waiting for incoming dat from transport...')
-			data = await self.packetizer_in.get()
-			#print('Data in: %s' % data)
-			self.recv_buffer += data
-			await self.process_recv_buffer()
+			#print('Waiting for incoming data from transport...')
+			try:
+				data = await self.packetizer_in.get()
+				self.recv_buffer += data
+				await self.process_recv_buffer()
 			
+			except asyncio.CancelledError:
+				return
+
 	@mpexception			
 	async def process_recv_buffer(self):
 		if len(self.recv_buffer) < 4:

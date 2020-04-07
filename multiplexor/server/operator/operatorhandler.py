@@ -75,7 +75,7 @@ class Operator:
 
 class OperatorHandler:
 	"""
-	Creates a websockwets server and listens for incoming operators, who will manage the agents via the server.
+	Creates a websocket server and listens for incoming operators, who will manage the agents via the server.
 	Once a new operator connected, it will notify the server of the new operator, and channel the incoming/outgoing data
 	"""
 	def __init__(self, listen_ip, listen_port, logQ, sslctx = None):

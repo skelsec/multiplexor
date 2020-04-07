@@ -60,7 +60,7 @@ class MultiplexorOperatorConnector:
 				self.reconnect_tries -= 1
 				if self.reconnect_tries < 0:
 					return
-			await self.logger.info('Connecting to server')
+			await self.logger.debug('Connecting to server')
 			try:
 				ws = await websockets.connect(self.server_url)
 				self.current_ws = ws
@@ -79,7 +79,7 @@ class MultiplexorOperatorConnector:
 			except asyncio.CancelledError:
 				return
 			except Exception as e:
-				await self.logger.info('Error connecting to server! Reason: %s' % e)
+				await self.logger.exception('Error connecting to server!')
 			else:
-				await self.logger.info('Connection lost to server! Reconnecting in %s seconds' % self.reconnect_interval)
+				await self.logger.debug('Connection lost to server! Reconnecting in %s seconds' % self.reconnect_interval)
 			await asyncio.sleep(self.reconnect_interval)
