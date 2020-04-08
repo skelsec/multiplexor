@@ -29,6 +29,8 @@ class KerberosSSPIClient:
 			await self.transport.send(json.dumps(ac.to_dict()))
 			data = await self.transport.recv()
 			rply = SSPIPluginCMD.from_dict(json.loads(data))
+			if rply.cmdtype == SSPICmdType.Winerror:
+				return None, rply.get_exception()
 			return base64.b64decode(rply.authdata), None
 		except Exception as e:
 			return None, e
