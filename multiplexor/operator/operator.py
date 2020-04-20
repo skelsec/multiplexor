@@ -272,8 +272,11 @@ class MultiplexorOperator:
 
 	async def run(self):
 		await self.connect()
+		try:
+			asyncio.create_task(self.on_run())
+		except Exception as e:
+			await self.logger.exception()
 		await self.disconnected_evt.wait()
-		await self.logger.info('DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD')
 
 
 	async def on_agent_connect(self, agent_id, agentinfo):
@@ -295,6 +298,9 @@ class MultiplexorOperator:
 		pass
 
 	async def on_server_error(self, reason):
+		pass
+	
+	async def on_run(self):
 		pass
 
 async def main_loop(args):
