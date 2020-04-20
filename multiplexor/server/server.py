@@ -393,7 +393,7 @@ class MultiplexorServer:
 		#agent needs to register before we talk to her...
 		await self.register_agent(agent)
 		if agent.status == AgentStatus.REGISTERED:
-			logging.info(agent.agent_id)
+			logging.info('New agent: %s' % agent.agent_id)
 			
 			#by default we poll some basic info on the client...
 			if not agent.info:

@@ -45,6 +45,7 @@ setup(
 	entry_points={
 		'console_scripts': [
 			'multiplexor = multiplexor.__main__:main',
+			'mpsocks5 = multiplexor.examples.mpsocks5:main',
 		],
 	},
 	
