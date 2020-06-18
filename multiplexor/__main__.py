@@ -1,6 +1,7 @@
 import asyncio
 import argparse
 import json
+import ssl
 import logging.config
 
 from multiplexor.server.transports.websockets import WebsocketsTransportServer
@@ -25,10 +26,11 @@ multiplexor_logconfig = {
 	}
 }
 
-async def startup(operator_listen_ip, operator_listen_port, listen_ip, listen_port):
+async def startup(operator_listen_ip, operator_listen_port, listen_ip, listen_port, agent_sslctx = None, operator_sslctx = None):
 	logger = Logger('multiplexor_server')
-	ophandler = OperatorHandler(operator_listen_ip, operator_listen_port, logger.logQ)
-	transport = WebsocketsTransportServer(listen_ip, listen_port, logger.logQ)
+
+	ophandler = OperatorHandler(operator_listen_ip, operator_listen_port, logger.logQ, ssl_ctx=operator_sslctx)
+	transport = WebsocketsTransportServer(listen_ip, listen_port, logger.logQ, ssl_ctx=agent_sslctx)
 	
 	mpserver = MultiplexorServer(logger)
 	mpserver.add_transport(transport)
@@ -46,9 +48,13 @@ def main():
 	parser.add_argument('-v', '--verbose', action='count', default=0, help='Increase verbosity, can be stacked')
 	parser.add_argument('--agent-listen-ip', default = '0.0.0.0', help='Accept remote agent connections on a spcific IP address. Default: 0.0.0.0')
 	parser.add_argument('--agent-listen-port', type = int, default = 8765, help='Accept remote agent connections on a spcific port. Default: 8765')
+	parser.add_argument('--agent-ssl-cert', help='Cert file for the agent server')
+	parser.add_argument('--agent-ssl-key', help='Key file for the agent server')
 	
 	parser.add_argument('--operator-listen-ip', default = '127.0.0.1', help='Accept remote agent connections on a spcific IP address. Default: 127.0.0.1')
 	parser.add_argument('--operator-listen-port', type = int, default = 9999, help='Accept remote agent connections on a spcific port. Default: 9999')
+	parser.add_argument('--operator-ssl-cert', help='Cert file for the operator server')
+	parser.add_argument('--operator-ssl-key', help='Key file for the operator server')
 	
 	parser.add_argument('-l', '--log-config-file', help='File for log configuration. Dictconfig encoded with json. Overrides verbosity!')
 	
@@ -58,6 +64,17 @@ def main():
 	listen_port = args.agent_listen_port
 	operator_listen_ip = args.operator_listen_ip
 	operator_listen_port = args.operator_listen_port
+
+	agent_sslctx = None
+	operator_sslctx = None
+
+	if args.agent_ssl_cert is not None:
+		agent_sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
+		agent_sslctx.load_cert_chain(args.agent_ssl_cert, args.agent_ssl_key)
+
+	if args.operator_ssl_cert is not None:
+		operator_sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
+		operator_sslctx.load_cert_chain(args.operator_ssl_cert, args.operator_ssl_key)
 
 	if args.log_config_file:
 		with open(args.log_config_file,'r') as f:
@@ -75,7 +92,7 @@ def main():
 
 	logging.config.dictConfig(logconf)
 	
-	asyncio.run(startup(operator_listen_ip, operator_listen_port, listen_ip, listen_port))
+	asyncio.run(startup(operator_listen_ip, operator_listen_port, listen_ip, listen_port, agent_sslctx, operator_sslctx))
 	
 
 if __name__ == '__main__':

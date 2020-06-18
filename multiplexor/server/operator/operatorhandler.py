@@ -78,10 +78,10 @@ class OperatorHandler:
 	Creates a websocket server and listens for incoming operators, who will manage the agents via the server.
 	Once a new operator connected, it will notify the server of the new operator, and channel the incoming/outgoing data
 	"""
-	def __init__(self, listen_ip, listen_port, logQ, sslctx = None):
+	def __init__(self, listen_ip, listen_port, logQ, ssl_ctx = None):
 		self.listen_ip = listen_ip
 		self.listen_port = listen_port
-		self.sslctx = sslctx
+		self.sslctx = ssl_ctx
 		self.transport_terminated_evt = asyncio.Event()
 		
 		self.operator_dispatch_queue = None		
