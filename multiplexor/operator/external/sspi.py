@@ -14,6 +14,11 @@ class KerberosSSPIClient:
 		
 	async def connect(self):
 		self.transport = await websockets.connect(self.server_url)
+	
+	async def disconnect(self):
+		ac = SSPITerminateCmd()
+		await self.transport.send(json.dumps(ac.to_dict()))
+		self.transport.close()
 
 	async def authenticate(self, target_name, flags = None, token_data = None):
 		try:
@@ -62,6 +67,11 @@ class SSPINTLMClient:
 		
 	async def connect(self):
 		self.transport = await websockets.connect(self.server_url)
+
+	async def disconnect(self):
+		ac = SSPITerminateCmd()
+		await self.transport.send(json.dumps(ac.to_dict()))
+		self.transport.close()
 		
 	async def authenticate(self, flags = None):
 		try:
