@@ -4,7 +4,7 @@ import json
 import ssl
 import logging.config
 
-from multiplexor.server.transports.http11 import HTTP11TransportServer
+from multiplexor.server.transports.websockets import WebsocketsTransportServer
 from multiplexor.server.operator.operatorhandler import OperatorHandler
 from multiplexor.server.server import MultiplexorServer
 from multiplexor.logger.logger import Logger
@@ -30,7 +30,7 @@ async def startup(operator_listen_ip, operator_listen_port, listen_ip, listen_po
 	logger = Logger('multiplexor_server')
 
 	ophandler = OperatorHandler(operator_listen_ip, operator_listen_port, logger.logQ, ssl_ctx=operator_sslctx)
-	transport = HTTP11TransportServer(listen_ip, listen_port, logger.logQ, ssl_ctx=agent_sslctx)
+	transport = WebsocketsTransportServer(listen_ip, listen_port, logger.logQ, ssl_ctx=agent_sslctx)
 	
 	mpserver = MultiplexorServer(logger)
 	mpserver.add_transport(transport)

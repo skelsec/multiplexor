@@ -21,6 +21,10 @@ class Packetizer:
 
 	@mpexception
 	async def terminate(self):
+		if self.multiplexor_in is not None:
+			await self.multiplexor_in.put(None)
+		if self.multiplexor_out is not None:
+			await self.multiplexor_out.put(None)
 		if self.send_loop_task is not None:
 			self.send_loop_task.cancel()
 		if self.recv_loop_task is not None:
@@ -35,6 +39,9 @@ class Packetizer:
 			#print('Waiting for incoming data from transport...')
 			try:
 				data = await self.packetizer_in.get()
+				if data is None:
+					await self.terminate()
+					return
 				self.recv_buffer += data
 				await self.process_recv_buffer()
 			
@@ -51,6 +58,7 @@ class Packetizer:
 			#print('data length: %s' % self.next_cmd_length)
 			
 		if len(self.recv_buffer) >= self.next_cmd_length + 4 and self.next_cmd_length != -1:
+			#rint('buffer: %s' % self.recv_buffer)
 			cmd = MultiplexorCMD.from_bytes(self.recv_buffer[4: self.next_cmd_length + 4])
 			#print(self.recv_buffer[: self.next_cmd_length + 4])
 			self.recv_buffer = self.recv_buffer[self.next_cmd_length + 4:]

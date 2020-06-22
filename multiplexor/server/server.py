@@ -196,6 +196,8 @@ class MultiplexorServer:
 		"""
 		while not self.shutdown_evt.is_set() or not agent.transport_terminated_evt.is_set():
 			cmd = await agent.packetizer.multiplexor_in.get()
+			if cmd is None:
+				return
 			if agent.status == AgentStatus.CONNECTED:
 				if cmd.cmdtype != ServerCMDType.REGISTER:
 					await self.logger.debug('Agent just connected and doesnt want to register!')
@@ -303,7 +305,9 @@ class MultiplexorServer:
 
 		while not self.shutdown_evt.is_set() or not agent.transport_terminated_evt.is_set():
 			cmd = await agent.packetizer.multiplexor_in.get()
-			
+			if cmd is None:
+				await self.terminate_agent(agent)
+				return
 			if cmd.cmdtype == ServerCMDType.GET_INFO:
 				await self.logger.debug(cmd.agent_info)
 				try:
@@ -382,8 +386,9 @@ class MultiplexorServer:
 			await self.operators[k].multiplexor_cmd_out.put(rply)
 
 		await agent.terminate()
-		self.agent_tasks[agent].cancel()
-		del self.agent_tasks[agent]
+		if agent in self.agent_tasks:
+			self.agent_tasks[agent].cancel()
+			del self.agent_tasks[agent]
 		try:
 			del self.agents[agent.agent_id]
 		except Exception as e:
