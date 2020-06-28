@@ -5,6 +5,7 @@ import ssl
 import logging.config
 
 from multiplexor.server.transports.http11 import HTTP11TransportServer
+from multiplexor.server.transports.websockets import WebsocketsTransportServer
 from multiplexor.server.operator.operatorhandler import OperatorHandler
 from multiplexor.server.server import MultiplexorServer
 from multiplexor.logger.logger import Logger
@@ -26,22 +27,33 @@ multiplexor_logconfig = {
 	}
 }
 
-async def startup(operator_listen_ip, operator_listen_port, listen_ip, listen_port, agent_sslctx = None, operator_sslctx = None):
-	logger = Logger('multiplexor_server')
+async def startup(operator_listen_ip, operator_listen_port, listen_ip, listen_port, agent_sslctx = None, operator_sslctx = None, transport_type = 'websockets'):
+	try:
+		logger = Logger('multiplexor_server')
 
-	ophandler = OperatorHandler(operator_listen_ip, operator_listen_port, logger.logQ, ssl_ctx=operator_sslctx)
-	transport = HTTP11TransportServer(listen_ip, listen_port, logger.logQ, ssl_ctx=agent_sslctx)
-	
-	mpserver = MultiplexorServer(logger)
-	mpserver.add_transport(transport)
-	mpserver.add_ophandler(ophandler)
+		ophandler = OperatorHandler(operator_listen_ip, operator_listen_port, logger.logQ, ssl_ctx=operator_sslctx)
+		if transport_type == 'websockets':
+			transport = WebsocketsTransportServer(listen_ip, listen_port, logger.logQ, ssl_ctx=agent_sslctx)
 
-	print(__banner__)
-	print('[+] Running config:')
-	print('[+] Agent service listening on    : %s:%s' % (listen_ip, listen_port))
-	print('[+] Operator service listening on : %s:%s' % (operator_listen_ip, operator_listen_port))
-	print('[+] Starting server...')
-	await mpserver.run()
+		elif transport_type == 'http11':
+			transport = HTTP11TransportServer(listen_ip, listen_port, logger.logQ, ssl_ctx=agent_sslctx)
+		
+		else:
+			raise Exception('Unknown transport type! %s' % transport_type)
+		
+		mpserver = MultiplexorServer(logger)
+		mpserver.add_transport(transport)
+		mpserver.add_ophandler(ophandler)
+
+		print(__banner__)
+		print('[+] Running config:')
+		print('[+] Agent service listening on    : %s:%s (%s)' % (listen_ip, listen_port, transport_type))
+		print('[+] Operator service listening on : %s:%s' % (operator_listen_ip, operator_listen_port))
+		print('[+] Starting server...')
+		await mpserver.run()
+		return True, None
+	except Exception as e:
+		return False, e
 
 def main():
 	parser = argparse.ArgumentParser(description='multiplexor server startup script')
@@ -50,6 +62,7 @@ def main():
 	parser.add_argument('--agent-listen-port', type = int, default = 8765, help='Accept remote agent connections on a spcific port. Default: 8765')
 	parser.add_argument('--agent-ssl-cert', help='Cert file for the agent server')
 	parser.add_argument('--agent-ssl-key', help='Key file for the agent server')
+	parser.add_argument('--agent-transport', choices=['websockets', 'http11'], help='Transport type (default: websockets)')
 	
 	parser.add_argument('--operator-listen-ip', default = '127.0.0.1', help='Accept remote agent connections on a spcific IP address. Default: 127.0.0.1')
 	parser.add_argument('--operator-listen-port', type = int, default = 9999, help='Accept remote agent connections on a spcific port. Default: 9999')
@@ -91,9 +104,13 @@ def main():
 			logconf['loggers']['websockets'] = 1
 
 	logging.config.dictConfig(logconf)
+
+	if args.agent_transport is None:
+		args.agent_transport = 'websockets'
 	
-	asyncio.run(startup(operator_listen_ip, operator_listen_port, listen_ip, listen_port, agent_sslctx, operator_sslctx))
-	
+	_, err = asyncio.run(startup(operator_listen_ip, operator_listen_port, listen_ip, listen_port, agent_sslctx, operator_sslctx, transport_type=args.agent_transport))
+	if err is not None:
+		print('Startup error! %s ' % str(err))
 
 if __name__ == '__main__':
 	main()
