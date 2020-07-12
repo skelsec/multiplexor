@@ -121,6 +121,12 @@ class SSPITerminateCmd:
 		cmd.cmdtype = self.cmdtype
 		cmd.params.append(self.session_id)
 		return cmd.to_bytes()
+
+	@staticmethod
+	def from_dict(d):
+		c = SSPITerminateCmd()
+		c.session_id = d['session_id']		
+		return c
 		
 class SSPIKerberosAuthCmd:
 	def __init__(self):

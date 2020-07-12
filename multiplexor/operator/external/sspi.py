@@ -18,7 +18,7 @@ class KerberosSSPIClient:
 	async def disconnect(self):
 		ac = SSPITerminateCmd()
 		await self.transport.send(json.dumps(ac.to_dict()))
-		self.transport.close()
+		await self.transport.close()
 
 	async def authenticate(self, target_name, flags = None, token_data = None):
 		try:
