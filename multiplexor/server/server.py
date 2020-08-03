@@ -141,7 +141,7 @@ class MultiplexorServer:
 			elif op_cmd.cmdtype == OperatorCmdType.PLUGIN_DATA_EVT:
 				try:
 					agent = self.agents[op_cmd.agent_id]
-					plugin = agent.plugins[op_cmd.plugin_id]					
+					plugin = agent.plugins[op_cmd.plugin_id]
 				except Exception as e:
 					await self.logger.debug('Operator tried to select and unknown agent %s and/or unknown pugin id %s' % (op_cmd.agent_id, op_cmd.plugin_id))
 				else:
@@ -272,6 +272,15 @@ class MultiplexorServer:
 				
 			if cmd.server['remote'] == False:
 				plugin_obj = MultiplexorSSPI
+
+		elif int(cmd.plugin_type) == PluginType.FILESYSTEM.value:
+			await self.logger.debug('Filesystem')
+			
+			if cmd.agent:
+				pp = FilesystemPluginAgentStartupSettings.from_dict(cmd.agent)
+				
+			if cmd.server['remote'] == False:
+				plugin_obj = MultiplexorFilesystem
 		
 		else:
 			raise Exception('Not implemented')

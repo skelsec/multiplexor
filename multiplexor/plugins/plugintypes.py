@@ -6,3 +6,4 @@ class PluginType(enum.Enum):
 	"""
 	SOCKS5 = 0
 	SSPI = 1
+	FILESYSTEM = 2

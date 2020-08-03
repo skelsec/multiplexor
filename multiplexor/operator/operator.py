@@ -28,6 +28,7 @@ class MultiplexorOperator:
 		self.reply_buffer = {} # cmd_id -> reply
 		self.reply_buffer_evt = {} #cmd_id -> event
 		self.plugin_created_evt = {} #agent_id -> {plugin_id -> started_event}
+		self.fs_plugin_id = None
 
 		self.connector_task = None
 		self.incoming_task = None
