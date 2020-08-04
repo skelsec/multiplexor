@@ -16,7 +16,7 @@ class HTTP11Transport:
 		self.reader = reader
 		self.writer = writer
 		self.incoming_task = None
-		self.template = b"""HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %s\r\nDate: Mon, 18 Jul 2016 16:06:00 GMT\r\nEtag: "c561c68d0ba92bbeb8b0f612a9199f722e3a621a"\r\nKeep-Alive: timeout=60, max=997\r\nServer: Apache\r\n\r\n%s"""
+		self.template = b"""HTTP/1.1 200 OK\r\nConnection: Close\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %s\r\nDate: Mon, 18 Jul 2016 16:06:00 GMT\r\nEtag: "c561c68d0ba92bbeb8b0f612a9199f722e3a621a"\r\nKeep-Alive: timeout=60, max=997\r\nServer: Apache\r\n\r\n%s"""
 
 	async def send(self, data):
 		#print('send %s' % data)
@@ -220,14 +220,7 @@ class HTTP11TransportServer:
 				#print(response)
 				writer.write(response)
 				await writer.drain()
-
-				if 'connection' in headers_lower:
-					if headers_lower['connection'].lower() == b'keep-alive' : 
-						continue
-					else:
-						break
-				else:
-					break
+				writer.close()
 
 		except Exception as e:
 			print('__incoming_handle %s' % e)
